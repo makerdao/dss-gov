@@ -77,7 +77,7 @@ contract DssChief is DSAuth, DSAuthority {
 
     function lift(address whom) external {
         // Verify the actual candidate has more than half of total supply of locked MKR
-        require(approvals[whom] > supply / 2, "not-enough-voting-power");
+        require(approvals[whom] > supply / 2, "DssChief/not-enough-voting-power");
         // Elect new candidate
         hat = whom;
         // Signal this account has been active and renew expiration time

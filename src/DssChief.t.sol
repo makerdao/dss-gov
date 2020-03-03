@@ -49,10 +49,6 @@ contract ChiefUser {
         chief.vote(whom);
     }
 
-    function doLift(address whom) public {
-        chief.lift(whom);
-    }
-
     function doLock(uint wad) public {
         chief.lock(wad);
     }
@@ -179,8 +175,6 @@ contract DssChiefTest is DSTest {
         user2.doLock(user2InitialBalance);
 
         user2.doVote(candidate1);
-        chief.lift(candidate1);
-        assertEq(candidate1, chief.hat());
         CandidateUser(candidate1).doSysTest();
     }
 
@@ -188,8 +182,8 @@ contract DssChiefTest is DSTest {
         CandidateUser(candidate1).doSysTest();
     }
 
-    function _tryLift(address usr) internal returns (bool ok) {
-        (ok,) = address(chief).call(abi.encodeWithSignature("lift(address)", usr));
+    function _trySysTest(address usr) internal returns (bool ok) {
+        (ok,) = address(usr).call(abi.encodeWithSignature("doSysTest()"));
     }
 
     function test_lift() public {
@@ -203,26 +197,26 @@ contract DssChiefTest is DSTest {
         assertEq(chief.approvals(candidate1), 350 ether);
         assertEq(chief.approvals(candidate2), 250 ether);
         assertEq(chief.approvals(candidate3), 200 ether);
-        assertTrue(!_tryLift(candidate1)); // candidate1 ~ 43% => can't be elected
+        assertTrue(!_trySysTest(candidate1)); // candidate1 ~ 43% => can't execute
 
         user3.doVote(candidate2);
         assertEq(chief.approvals(candidate1), 350 ether);
         assertEq(chief.approvals(candidate2), 450 ether);
         assertEq(chief.approvals(candidate3), 0);
-        assertTrue(_tryLift(candidate2)); // candidate2 ~ 56% => can be elected
+        assertTrue(_trySysTest(candidate2)); // candidate2 ~ 56% => can execute
 
         hevm.warp(1);
         user3.doFree(user3, 100 ether);
         assertEq(chief.approvals(candidate1), 350 ether);
         assertEq(chief.approvals(candidate2), 350 ether);
         assertEq(chief.approvals(candidate3), 0);
-        assertTrue(!_tryLift(candidate2)); // candidate2 = 50% => can't be elected
+        assertTrue(!_trySysTest(candidate2)); // candidate2 = 50% => can't execute
 
         user3.doLock(1);
         assertEq(chief.approvals(candidate1), 350 ether);
         assertEq(chief.approvals(candidate2), 350 ether + 1);
         assertEq(chief.approvals(candidate3), 0);
-        assertTrue(_tryLift(candidate2)); // candidate2 > 50% => can be elected
+        assertTrue(_trySysTest(candidate2)); // candidate2 > 50% => can execute
     }
 
     function test_free_other_user() public {

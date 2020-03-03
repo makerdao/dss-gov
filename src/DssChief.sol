@@ -11,7 +11,6 @@ contract DssChief is DSAuth, DSAuthority {
     TokenLike                       public gov;         // MKR gov token
     uint256                         public supply;      // Total MKR locked
     uint256                         public ttl;         // MKR locked expiration time (admin param)
-    address                         public hat;         // Elected Candidate
     mapping(address => address)     public votes;       // Voter => Candidate
     mapping(address => uint256)     public approvals;   // Candidate => Amount of votes
     mapping(address => uint256)     public deposits;    // Voter => Voting power
@@ -75,16 +74,7 @@ contract DssChief is DSAuth, DSAuthority {
         last[msg.sender] = now;
     }
 
-    function lift(address whom) external {
-        // Verify the actual candidate has more than half of total supply of locked MKR
-        require(approvals[whom] > supply / 2, "DssChief/not-enough-voting-power");
-        // Elect new candidate
-        hat = whom;
-        // Signal this account has been active and renew expiration time
-        last[msg.sender] = now;
-    }
-
     function canCall(address caller, address, bytes4) public view returns (bool ok) {
-        ok = caller == hat;
+        ok = approvals[caller] > supply / 2;
     }
 }

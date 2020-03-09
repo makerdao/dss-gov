@@ -11,8 +11,10 @@ contract DssChief is DSAuth, DSAuthority {
     TokenLike                                           public gov;         // MKR gov token
     uint256                                             public supply;      // Total MKR locked
     uint256                                             public ttl;         // MKR locked expiration time (admin param)
+    uint256                                             public end;         // Candidate expiration time (admin param)
     mapping(address => mapping(address => uint256))     public votes;       // Voter => Candidate => Voted
     mapping(address => uint256)                         public approvals;   // Candidate => Amount of votes
+    mapping(address => uint256)                         public candidates;  // Candidate => Expiration
     mapping(address => uint256)                         public deposits;    // Voter => Voting power
     mapping(address => uint256)                         public count;       // Voter => Amount of candidates voted
     mapping(address => uint256)                         public last;        // Last time executed
@@ -31,6 +33,7 @@ contract DssChief is DSAuth, DSAuthority {
 
     function file(bytes32 what, uint256 data) public auth {
         if (what == "ttl") ttl = data;
+        else if (what == "end") end = data;
         else revert("DssChief/file-unrecognized-param");
     }
 
@@ -69,6 +72,10 @@ contract DssChief is DSAuth, DSAuthority {
     function vote(address whom) external {
         // Check the whom candidate was not previously voted by msg.sender
         require(votes[msg.sender][whom] == 0, "DssChief/candidate-already-voted");
+        // If it's the first vote for this candidate, set the expiration time
+        if (candidates[whom] == 0) {
+            candidates[whom] = add(now, end);
+        }
         // Mark candidate as voted by msg.sender
         votes[msg.sender][whom] = 1;
         // Add voting power to the candidate
@@ -95,6 +102,6 @@ contract DssChief is DSAuth, DSAuthority {
     }
 
     function canCall(address caller, address, bytes4) public view returns (bool ok) {
-        ok = approvals[caller] > supply / 2;
+        ok = approvals[caller] > supply / 2 && now <= candidates[caller];
     }
 }

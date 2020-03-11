@@ -11,7 +11,7 @@ contract DssChief is DSAuth, DSAuthority {
     TokenLike                                           public gov;         // MKR gov token
     uint256                                             public supply;      // Total MKR locked
     uint256                                             public ttl;         // MKR locked expiration time (admin param)
-    uint256                                             public end;         // Candidate expiration time (admin param)
+    uint256                                             public end;         // Duration of a candidate's validity in seconds (admin param)
     mapping(address => mapping(address => uint256))     public votes;       // Voter => Candidate => Voted
     mapping(address => uint256)                         public approvals;   // Candidate => Amount of votes
     mapping(address => uint256)                         public candidates;  // Candidate => Expiration

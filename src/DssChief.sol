@@ -82,7 +82,7 @@ contract DssChief is DSAuth, DSAuthority {
         require(votes[usr][whom] == 1, "DssChief/candidate-not-voted");
         // Verify usr is sender or their voting power is already expired
         require(usr == msg.sender || add(last[usr], ttl) < now, "DssChief/not-allowed-to-undo");
-        // Mark candidate as no voted by usr
+        // Mark candidate as not voted for by usr
         votes[usr][whom] = 0;
         // Remove voting power from the candidate
         approvals[whom] = sub(approvals[whom], deposits[usr]);

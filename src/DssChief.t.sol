@@ -108,6 +108,7 @@ contract DssChiefTest is DSTest {
 
         chief = new DssChief(address(gov));
         chief.file("ttl", 100);
+        chief.file("end", 200);
 
         sys = new System();
         sys.setAuthority(DSAuthority(address(chief)));
@@ -276,6 +277,12 @@ contract DssChiefTest is DSTest {
         assertEq(chief.approvals(candidate2), 350 ether + 1);
         assertEq(chief.approvals(candidate3), 0);
         assertTrue(_trySysTest(candidate2)); // candidate2 > 50% => can execute
+
+        hevm.warp(200);
+        assertTrue(_trySysTest(candidate2)); // candidate2 => still can execute
+
+        hevm.warp(201);
+        assertTrue(!_trySysTest(candidate2)); // candidate2 => can't execute as it is expired
     }
 
     function test_undo_other_user() public {

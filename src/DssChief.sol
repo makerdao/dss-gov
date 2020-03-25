@@ -60,6 +60,8 @@ contract DssChief is DSAuth, DSAuthority {
         supply = sub(supply, wad);
         // Push token back to usr's wallet
         gov.transfer(usr, wad);
+        // Clean storage if usr is not the sender (for gas refund)
+        if (usr != msg.sender) delete last[usr];
         // Signal this account has been active and renew expiration time
         last[msg.sender] = now;
     }

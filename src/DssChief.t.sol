@@ -49,6 +49,10 @@ contract ChiefUser {
         chief.vote(whom);
     }
 
+    function doUndo(ChiefUser usr, address whom) public {
+        chief.undo(address(usr), whom);
+    }
+
     function doLock(uint wad) public {
         chief.lock(wad);
     }
@@ -152,23 +156,73 @@ contract DssChiefTest is DSTest {
         user1.doFree(user1, user1LockedAmt);
     }
 
-    function test_changing_weight_after_voting() public {
+    function test_voting_unvoting() public {
+        uint user1LockedAmt = user1InitialBalance / 2;
+        user1.doLock(user1LockedAmt);
+
+        assertEq(chief.count(address(user1)), 0);
+        assertEq(chief.approvals(candidate1), 0);
+        assertEq(chief.approvals(candidate2), 0);
+        assertEq(chief.approvals(candidate3), 0);
+
+        user1.doVote(candidate1);
+        assertEq(chief.count(address(user1)), 1);
+        assertEq(chief.approvals(candidate1), user1LockedAmt);
+        assertEq(chief.approvals(candidate2), 0);
+        assertEq(chief.approvals(candidate3), 0);
+
+        user1.doVote(candidate2);
+        assertEq(chief.count(address(user1)), 2);
+        assertEq(chief.approvals(candidate1), user1LockedAmt);
+        assertEq(chief.approvals(candidate2), user1LockedAmt);
+        assertEq(chief.approvals(candidate3), 0);
+
+        user1.doVote(candidate3);
+        assertEq(chief.count(address(user1)), 3);
+        assertEq(chief.approvals(candidate1), user1LockedAmt);
+        assertEq(chief.approvals(candidate2), user1LockedAmt);
+        assertEq(chief.approvals(candidate3), user1LockedAmt);
+
+        user1.doUndo(user1, candidate1);
+        assertEq(chief.count(address(user1)), 2);
+        assertEq(chief.approvals(candidate1), 0);
+        assertEq(chief.approvals(candidate2), user1LockedAmt);
+        assertEq(chief.approvals(candidate3), user1LockedAmt);
+
+        user1.doUndo(user1, candidate2);
+        assertEq(chief.count(address(user1)), 1);
+        assertEq(chief.approvals(candidate1), 0);
+        assertEq(chief.approvals(candidate2), 0);
+        assertEq(chief.approvals(candidate3), user1LockedAmt);
+
+        user1.doUndo(user1, candidate3);
+        assertEq(chief.count(address(user1)), 0);
+        assertEq(chief.approvals(candidate1), 0);
+        assertEq(chief.approvals(candidate2), 0);
+        assertEq(chief.approvals(candidate3), 0);
+
+        hevm.warp(1);
+        user1.doFree(user1, user1LockedAmt);
+    }
+
+    function testFail_lock_when_voting() public {
         uint user1LockedAmt = user1InitialBalance / 2;
         user1.doLock(user1LockedAmt);
 
         user1.doVote(candidate1);
 
-        assertEq(chief.approvals(candidate1), user1LockedAmt);
-
-        // Changing weight should update the weight of our candidate.
         hevm.warp(1);
-        user1.doFree(user1, user1LockedAmt);
-        assertEq(chief.approvals(candidate1), 0);
+        user1.doLock(1);
+    }
 
-        user1LockedAmt = user1InitialBalance / 4;
+    function testFail_free_when_voting() public {
+        uint user1LockedAmt = user1InitialBalance / 2;
         user1.doLock(user1LockedAmt);
 
-        assertEq(chief.approvals(candidate1), user1LockedAmt);
+        user1.doVote(candidate1);
+
+        hevm.warp(1);
+        user1.doFree(user1, 1);
     }
 
     function test_basic_lift_sys_test() public {
@@ -199,24 +253,41 @@ contract DssChiefTest is DSTest {
         assertEq(chief.approvals(candidate3), 200 ether);
         assertTrue(!_trySysTest(candidate1)); // candidate1 ~ 43% => can't execute
 
+        user3.doUndo(user3, candidate3);
         user3.doVote(candidate2);
         assertEq(chief.approvals(candidate1), 350 ether);
         assertEq(chief.approvals(candidate2), 450 ether);
         assertEq(chief.approvals(candidate3), 0);
         assertTrue(_trySysTest(candidate2)); // candidate2 ~ 56% => can execute
 
+        user3.doUndo(user3, candidate2);
         hevm.warp(1);
         user3.doFree(user3, 100 ether);
+        user3.doVote(candidate2);
         assertEq(chief.approvals(candidate1), 350 ether);
         assertEq(chief.approvals(candidate2), 350 ether);
         assertEq(chief.approvals(candidate3), 0);
         assertTrue(!_trySysTest(candidate2)); // candidate2 = 50% => can't execute
 
+        user3.doUndo(user3, candidate2);
         user3.doLock(1);
+        user3.doVote(candidate2);
         assertEq(chief.approvals(candidate1), 350 ether);
         assertEq(chief.approvals(candidate2), 350 ether + 1);
         assertEq(chief.approvals(candidate3), 0);
         assertTrue(_trySysTest(candidate2)); // candidate2 > 50% => can execute
+    }
+
+    function test_undo_other_user() public {
+        user3.doVote(candidate1);
+        hevm.warp(chief.ttl() + 1);
+        user1.doUndo(user3, candidate1);
+    }
+
+    function testFail_undo_other_user() public {
+        user3.doVote(candidate1);
+        hevm.warp(chief.ttl());
+        user1.doUndo(user3, candidate1);
     }
 
     function test_free_other_user() public {

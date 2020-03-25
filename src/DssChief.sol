@@ -14,7 +14,7 @@ contract DssChief is DSAuth, DSAuthority {
     uint256                                             public end;         // Duration of a candidate's validity in seconds (admin param)
     mapping(address => mapping(address => uint256))     public votes;       // Voter => Candidate => Voted
     mapping(address => uint256)                         public approvals;   // Candidate => Amount of votes
-    mapping(address => uint256)                         public candidates;  // Candidate => Expiration
+    mapping(address => uint256)                         public expirations; // Candidate => Expiration
     mapping(address => uint256)                         public deposits;    // Voter => Voting power
     mapping(address => uint256)                         public count;       // Voter => Amount of candidates voted
     mapping(address => uint256)                         public last;        // Last time executed
@@ -73,8 +73,8 @@ contract DssChief is DSAuth, DSAuthority {
         // Check the whom candidate was not previously voted by msg.sender
         require(votes[msg.sender][whom] == 0, "DssChief/candidate-already-voted");
         // If it's the first vote for this candidate, set the expiration time
-        if (candidates[whom] == 0) {
-            candidates[whom] = add(now, end);
+        if (expirations[whom] == 0) {
+            expirations[whom] = add(now, end);
         }
         // Mark candidate as voted by msg.sender
         votes[msg.sender][whom] = 1;
@@ -102,6 +102,6 @@ contract DssChief is DSAuth, DSAuthority {
     }
 
     function canCall(address caller, address, bytes4) public view returns (bool ok) {
-        ok = approvals[caller] > supply / 2 && now <= candidates[caller];
+        ok = approvals[caller] > supply / 2 && now <= expirations[caller];
     }
 }

@@ -84,7 +84,10 @@ contract DssChief {
         require(votes[msg.sender][whom] == 0, "DssChief/candidate-already-voted");
         // If it's the first vote for this candidate, set the expiration time
         if (expirations[whom] == 0) {
-            require(deposits[msg.sender] >= min, "DssChief/not-minimum-amount");
+            // Check min is set to 0 or
+            // users deposits are >= than min value + is not launching a vote on same block where another action happened (to avoid usage of flash loans)
+            require(min == 0 || deposits[msg.sender] >= min && last[msg.sender] < now, "DssChief/not-minimum-amount");
+            // Set expiration time
             expirations[whom] = add(now, end);
         }
         // Mark candidate as voted by msg.sender

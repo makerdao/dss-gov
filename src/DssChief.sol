@@ -19,6 +19,7 @@ contract DssChief {
     uint256                                             public supply;      // Total MKR locked
     uint256                                             public ttl;         // MKR locked expiration time (admin param)
     uint256                                             public end;         // Duration of a candidate's validity in seconds (admin param)
+    uint256                                             public min;         // Min MKR stake for launching a vote (admin param)
     mapping(address => mapping(address => uint256))     public votes;       // Voter => Candidate => Voted
     mapping(address => uint256)                         public approvals;   // Candidate => Amount of votes
     mapping(address => uint256)                         public expirations; // Candidate => Expiration
@@ -42,6 +43,7 @@ contract DssChief {
     function file(bytes32 what, uint256 data) public auth {
         if (what == "ttl") ttl = data;
         else if (what == "end") end = data;
+        else if (what == "min") min = data;
         else revert("DssChief/file-unrecognized-param");
     }
 
@@ -82,6 +84,7 @@ contract DssChief {
         require(votes[msg.sender][whom] == 0, "DssChief/candidate-already-voted");
         // If it's the first vote for this candidate, set the expiration time
         if (expirations[whom] == 0) {
+            require(deposits[msg.sender] >= min, "DssChief/not-minimum-amount");
             expirations[whom] = add(now, end);
         }
         // Mark candidate as voted by msg.sender

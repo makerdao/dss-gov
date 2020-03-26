@@ -1,13 +1,20 @@
 pragma solidity ^0.5.12;
 
-import { DSAuth, DSAuthority } from "ds-auth/auth.sol";
-
 contract TokenLike {
     function transferFrom(address, address, uint256) external;
     function transfer(address, uint256) external;
 }
 
-contract DssChief is DSAuth, DSAuthority {
+contract DssChief {
+    // --- Auth ---
+    mapping (address => uint) public wards;
+    function rely(address usr) external auth { wards[usr] = 1; }
+    function deny(address usr) external auth { wards[usr] = 0; }
+    modifier auth {
+        require(wards[msg.sender] == 1, "DssChief/not-authorized");
+        _;
+    }
+
     TokenLike                                           public gov;         // MKR gov token
     uint256                                             public supply;      // Total MKR locked
     uint256                                             public ttl;         // MKR locked expiration time (admin param)
@@ -29,6 +36,7 @@ contract DssChief is DSAuth, DSAuthority {
 
     constructor(address gov_) public {
         gov = TokenLike(gov_);
+        wards[msg.sender] = 1;
     }
 
     function file(bytes32 what, uint256 data) public auth {

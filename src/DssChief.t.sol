@@ -1,9 +1,9 @@
 pragma solidity ^0.5.12;
 
 import "ds-test/test.sol";
-import { DSToken } from "ds-token/token.sol";
+import { DSAuth, DSAuthority, DSToken } from "ds-token/token.sol";
 
-import { DSAuth, DSAuthority, DssChief } from "./DssChief.sol";
+import { DssChief } from "./DssChief.sol";
 
 contract Hevm {
     function warp(uint) public;

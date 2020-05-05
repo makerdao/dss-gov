@@ -308,4 +308,28 @@ contract DssChiefTest is DSTest {
         hevm.warp(chief.ttl());
         user1.doFree(user3, user3InitialBalance);
     }
+
+    function test_first_vote_min() public {
+        chief.file("min", 50);
+        user3.doLock(50);
+        assertEq(chief.deposits(address(user3)), 50);
+        hevm.warp(1);
+        user3.doVote(candidate1);
+        user2.doLock(49);
+        assertEq(chief.deposits(address(user2)), 49);
+        user2.doVote(candidate1);
+    }
+
+    function testFail_first_vote_not_min() public {
+        chief.file("min", 50);
+        user3.doLock(50);
+        user3.doVote(candidate1);
+    }
+
+    function testFail_first_vote_not_time() public {
+        chief.file("min", 50);
+        user3.doLock(49);
+        hevm.warp(1);
+        user3.doVote(candidate1);
+    }
 }

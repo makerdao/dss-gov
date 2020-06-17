@@ -20,6 +20,7 @@ contract DssChief {
     uint256                                             public ttl;         // MKR locked expiration time (admin param)
     uint256                                             public end;         // Duration of a candidate's validity in seconds (admin param)
     uint256                                             public min;         // Min MKR stake for launching a vote (admin param)
+    uint256                                             public post;        // Min % of total locked MKR to approve a proposal (admin param)
     mapping(address => mapping(address => uint256))     public votes;       // Voter => Candidate => Voted
     mapping(address => uint256)                         public approvals;   // Candidate => Amount of votes
     mapping(address => uint256)                         public expirations; // Candidate => Expiration
@@ -41,6 +42,10 @@ contract DssChief {
         require((z = x - y) <= x);
     }
 
+    function mul(uint256 x, uint256 y) internal pure returns (uint256 z) {
+        require(y == 0 || (z = x * y) / y == x);
+    }
+
     constructor(address gov_) public {
         gov = TokenLike(gov_);
         wards[msg.sender] = 1;
@@ -50,6 +55,10 @@ contract DssChief {
         if (what == "ttl") ttl = data;
         else if (what == "end") end = data;
         else if (what == "min") min = data;
+        else if (what == "post") {
+            require(data >= 15 && data <= 75, "DssChief/post-not-safe-range");
+            post = data;
+        }
         else revert("DssChief/file-unrecognized-param");
     }
 
@@ -126,6 +135,6 @@ contract DssChief {
     }
 
     function canCall(address caller, address, bytes4) public view returns (bool ok) {
-        ok = approvals[caller] > supply / 2 && now <= expirations[caller];
+        ok = approvals[caller] > mul(supply, post) / 100 && now <= expirations[caller];
     }
 }

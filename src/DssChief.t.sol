@@ -341,16 +341,16 @@ contract DssChiefTest is DSTest {
     }
 
     function test_set_post() public {
-        for (uint256 i = 15; i <= 75; i++) {
+        for (uint256 i = chief.MIN_POST(); i <= chief.MAX_POST(); i++) {
             chief.file("post", i);
         }
     }
 
     function testFail_set_post_under_boundary() public {
-        chief.file("post", 14);
+        chief.file("post", chief.MIN_POST() - 1);
     }
 
     function testFail_set_post_over_boundary() public {
-        chief.file("post", 76);
+        chief.file("post", chief.MAX_POST() + 1);
     }
 }

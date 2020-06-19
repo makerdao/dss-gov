@@ -5,6 +5,12 @@ contract TokenLike {
     function transfer(address, uint256) external;
 }
 
+contract PauseLike {
+    function delay() external view returns (uint256);
+    function drop(address, bytes memory, uint256) external;
+    function plot(address, bytes memory, uint256) external;
+}
+
 contract DssChief {
     // --- Auth ---
     mapping (address => uint) public wards;
@@ -21,9 +27,10 @@ contract DssChief {
     uint256                                             public end;             // Duration of a candidate's validity in seconds (admin param)
     uint256                                             public min;             // Min MKR stake for launching a vote (admin param)
     uint256                                             public post;            // Min % of total locked MKR to approve a proposal (admin param)
-    mapping(address => mapping(address => uint256))     public votes;           // Voter => Candidate => Voted
-    mapping(address => uint256)                         public approvals;       // Candidate => Amount of votes
-    mapping(address => uint256)                         public expirations;     // Candidate => Expiration
+    mapping(address => mapping(bytes32 => uint256))     public votes;           // Voter => Candidate => Voted
+    mapping(bytes32 => uint256)                         public approvals;       // Candidate => Amount of votes
+    mapping(bytes32 => uint256)                         public expirations;     // Candidate => Expiration
+    mapping(bytes32 => uint256)                         public eta;             // Candidate => Time for cast
     mapping(address => uint256)                         public deposits;        // Voter => Voting power
     mapping(address => uint256)                         public count;           // Voter => Amount of candidates voted
     mapping(address => uint256)                         public last;            // Last time executed
@@ -97,7 +104,9 @@ contract DssChief {
         if (usr != msg.sender) delete last[usr];
     }
 
-    function vote(address whom) external warm {
+    function vote(address pause, address action) external {
+        // Generate hash pause/action
+        bytes32 whom = keccak256(abi.encodePacked(pause, action));
         // Check the whom candidate was not previously voted by msg.sender
         require(votes[msg.sender][whom] == 0, "DssChief/candidate-already-voted");
         // If it's the first vote for this candidate, set the expiration time
@@ -121,7 +130,9 @@ contract DssChief {
         count[msg.sender] = add(count[msg.sender], 1);
     }
 
-    function undo(address usr, address whom) external warm {
+    function undo(address usr, address pause, address action) external {
+        // Generate hash pause/action
+        bytes32 whom = keccak256(abi.encodePacked(pause, proposal));
         // Check the candidate whom is actually voted by usr
         require(votes[usr][whom] == 1, "DssChief/candidate-not-voted");
         // Verify usr is sender or their voting power is already expired
@@ -137,7 +148,26 @@ contract DssChief {
         count[usr] = sub(count[usr], 1);
     }
 
-    function canCall(address caller, address, bytes4) public view returns (bool ok) {
-        ok = approvals[caller] > mul(supply, post) / 100 && now <= expirations[caller];
+    function plot(address pause, address action) external {
+        // Generate hash pause/action
+        bytes32 whom = keccak256(abi.encodePacked(pause, proposal));
+        // Check enough MKR is voting this proposal and it's not already expired
+        require(approvals[whom] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
+        require(now <= expirations[whom], "vote-expired");
+        // Verify was not already plotted
+        require(eta[whom] == 0, "DssChief/action-already-plotted");
+        // Get execution time for the proposal
+        eta[whom] = now + PauseLike(pause).delay();
+        // Plot action proposal
+        PauseLike(pause).plot(action, abi.encodeWithSignature("execute()"), eta[whom]);
+    }
+
+    function drop(address pause, address action) external {
+        // Check enough MKR is voting address(0) => which means Governance is in emergency mode
+        require(approvals[address(0)] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
+        // Generate hash pause/action
+        bytes32 whom = keccak256(abi.encodePacked(pause, proposal));
+        // Drop action proposal
+        PauseLike(pause).drop(action, abi.encodeWithSignature("execute()"), eta[whom]);
     }
 }

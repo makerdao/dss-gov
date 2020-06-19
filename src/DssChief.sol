@@ -27,6 +27,12 @@ contract DssChief {
     mapping(address => uint256)                         public count;       // Voter => Amount of candidates voted
     mapping(address => uint256)                         public last;        // Last time executed
 
+    // warm account and renew expiration time
+    modifier warm {
+        _;
+        last[msg.sender] = now;
+    }
+
     function add(uint256 x, uint256 y) internal pure returns (uint256 z) {
         require((z = x + y) >= x);
     }
@@ -47,7 +53,7 @@ contract DssChief {
         else revert("DssChief/file-unrecognized-param");
     }
 
-    function lock(uint256 wad) external {
+    function lock(uint256 wad) external warm {
         // Can't lock more MKR if msg.sender is already voting candidates
         require(count[msg.sender] == 0, "DssChief/existing-voted-candidates");
         // Pull collateral from sender's wallet
@@ -56,16 +62,18 @@ contract DssChief {
         deposits[msg.sender] = add(deposits[msg.sender], wad);
         // Increase total supply
         supply = add(supply, wad);
-        // Signal this account has been active and renew expiration time
-        last[msg.sender] = now;
     }
 
-    function free(address usr, uint256 wad) external {
+    function free(address usr, uint256 wad) external warm {
         // Can't free MKR if usr is still voting candidates
         require(count[usr] == 0, "DssChief/existing-voted-candidates");
         // Verify usr is sender or their voting power is already expired
-        require(usr == msg.sender || add(last[usr], ttl) < now, "DssChief/not-allowed-to-free");
-        // Verify is not freeing on same block where another action happened (to avoid usage of flash loans)
+        require(
+            usr == msg.sender || add(last[usr], ttl) < now,
+            "DssChief/not-allowed-to-free"
+        );
+        // Verify is not freeing on same block where another action happened
+        // (to avoid usage of flash loans)
         require(last[usr] < now, "DssChief/not-minimum-time-passed");
         // Decrease amount deposited from usr
         deposits[usr] = sub(deposits[usr], wad);
@@ -75,18 +83,21 @@ contract DssChief {
         gov.transfer(usr, wad);
         // Clean storage if usr is not the sender (for gas refund)
         if (usr != msg.sender) delete last[usr];
-        // Signal this account has been active and renew expiration time
-        last[msg.sender] = now;
     }
 
-    function vote(address whom) external {
+    function vote(address whom) external warm {
         // Check the whom candidate was not previously voted by msg.sender
         require(votes[msg.sender][whom] == 0, "DssChief/candidate-already-voted");
         // If it's the first vote for this candidate, set the expiration time
         if (expirations[whom] == 0) {
             // Check min is set to 0 or
-            // users deposits are >= than min value + is not launching a vote on same block where another action happened (to avoid usage of flash loans)
-            require(min == 0 || deposits[msg.sender] >= min && last[msg.sender] < now, "DssChief/not-minimum-amount");
+            // user deposits are >= than min value + it's not launching a vote
+            // on the same block where another action happened
+            // (to avoid usage of flash loans)
+            require(
+                min == 0 || deposits[msg.sender] >= min && last[msg.sender] < now,
+                "DssChief/not-minimum-amount"
+            );
             // Set expiration time
             expirations[whom] = add(now, end);
         }
@@ -96,23 +107,22 @@ contract DssChief {
         approvals[whom] = add(approvals[whom], deposits[msg.sender]);
         // Increase the voting counter from msg.sender
         count[msg.sender] = add(count[msg.sender], 1);
-        // Signal this account has been active and renew expiration time
-        last[msg.sender] = now;
     }
 
-    function undo(address usr, address whom) external {
+    function undo(address usr, address whom) external warm {
         // Check the candidate whom is actually voted by usr
         require(votes[usr][whom] == 1, "DssChief/candidate-not-voted");
         // Verify usr is sender or their voting power is already expired
-        require(usr == msg.sender || add(last[usr], ttl) < now, "DssChief/not-allowed-to-undo");
+        require(
+            usr == msg.sender || add(last[usr], ttl) < now,
+            "DssChief/not-allowed-to-undo"
+        );
         // Mark candidate as not voted for by usr
         votes[usr][whom] = 0;
         // Remove voting power from the candidate
         approvals[whom] = sub(approvals[whom], deposits[usr]);
         // Decrease the voting counter from usr
         count[usr] = sub(count[usr], 1);
-        // Signal this account has been active and renew expiration time
-        last[msg.sender] = now;
     }
 
     function canCall(address caller, address, bytes4) public view returns (bool ok) {

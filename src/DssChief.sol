@@ -28,8 +28,8 @@ contract DssChief {
     mapping(address => uint256)                         public count;           // Voter => Amount of candidates voted
     mapping(address => uint256)                         public last;            // Last time executed
 
-    uint256                                    constant public MIN_POST = 15;   // Min post value that admin can set
-    uint256                                    constant public MAX_POST = 75;   // Max post value that admin can set
+    uint256                                    constant public MIN_POST = 40;   // Min post value that admin can set
+    uint256                                    constant public MAX_POST = 60;   // Max post value that admin can set
 
     // warm account and renew expiration time
     modifier warm {

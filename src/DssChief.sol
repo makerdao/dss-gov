@@ -150,7 +150,7 @@ contract DssChief {
 
     function plot(address pause, address action) external {
         // Generate hash pause/action
-        bytes32 whom = keccak256(abi.encodePacked(pause, proposal));
+        bytes32 whom = keccak256(abi.encodePacked(pause, action));
         // Check enough MKR is voting this proposal and it's not already expired
         require(approvals[whom] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
         require(now <= expirations[whom], "vote-expired");
@@ -166,7 +166,7 @@ contract DssChief {
         // Check enough MKR is voting address(0) => which means Governance is in emergency mode
         require(approvals[address(0)] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
         // Generate hash pause/action
-        bytes32 whom = keccak256(abi.encodePacked(pause, proposal));
+        bytes32 whom = keccak256(abi.encodePacked(pause, action));
         // Drop action proposal
         PauseLike(pause).drop(action, abi.encodeWithSignature("execute()"), eta[whom]);
     }

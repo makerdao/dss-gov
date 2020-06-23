@@ -109,6 +109,7 @@ contract DssChiefTest is DSTest {
         chief = new DssChief(address(gov));
         chief.file("ttl", 100);
         chief.file("end", 200);
+        chief.file("post", 50);
 
         sys = new System();
         sys.setAuthority(DSAuthority(address(chief)));
@@ -278,6 +279,12 @@ contract DssChiefTest is DSTest {
         assertEq(chief.approvals(candidate3), 0);
         assertTrue(_trySysTest(candidate2)); // candidate2 > 50% => can execute
 
+        chief.file("post", 51);
+        assertTrue(!_trySysTest(candidate2)); // candidate2 < 51% => can't execute
+
+        chief.file("post", 50);
+        assertTrue(_trySysTest(candidate2)); // candidate2 > 50% => can execute again
+
         hevm.warp(200);
         assertTrue(_trySysTest(candidate2)); // candidate2 => still can execute
 
@@ -331,5 +338,19 @@ contract DssChiefTest is DSTest {
         user3.doLock(49);
         hevm.warp(1);
         user3.doVote(candidate1);
+    }
+
+    function test_set_post() public {
+        for (uint256 i = chief.MIN_POST(); i <= chief.MAX_POST(); i++) {
+            chief.file("post", i);
+        }
+    }
+
+    function testFail_set_post_under_boundary() public {
+        chief.file("post", chief.MIN_POST() - 1);
+    }
+
+    function testFail_set_post_over_boundary() public {
+        chief.file("post", chief.MAX_POST() + 1);
     }
 }

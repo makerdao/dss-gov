@@ -5,38 +5,53 @@ contract TokenLike {
     function transfer(address, uint256) external;
 }
 
-contract PauseLike {
+contract DelayLike {
     function delay() external view returns (uint256);
     function drop(address, bytes memory, uint256) external;
-    function plot(address, bytes memory, uint256) external;
+    function plot(address, bytes memory, uint256) external returns (uint256);
 }
 
 contract DssChief {
     // --- Auth ---
-    mapping (address => uint) public wards;
-    function rely(address usr) external auth { wards[usr] = 1; }
-    function deny(address usr) external auth { wards[usr] = 0; }
+    mapping (address => uint256)    public wards;
+    function rely(address usr)      external auth { wards[usr] = 1; }
+    function deny(address usr)      external auth { wards[usr] = 0; }
     modifier auth {
         require(wards[msg.sender] == 1, "DssChief/not-authorized");
         _;
     }
 
-    TokenLike                                           public gov;             // MKR gov token
-    uint256                                             public supply;          // Total MKR locked
-    uint256                                             public ttl;             // MKR locked expiration time (admin param)
-    uint256                                             public end;             // Duration of a candidate's validity in seconds (admin param)
-    uint256                                             public min;             // Min MKR stake for launching a vote (admin param)
-    uint256                                             public post;            // Min % of total locked MKR to approve a proposal (admin param)
-    mapping(address => mapping(bytes32 => uint256))     public votes;           // Voter => Candidate => Voted
-    mapping(bytes32 => uint256)                         public approvals;       // Candidate => Amount of votes
-    mapping(bytes32 => uint256)                         public expirations;     // Candidate => Expiration
-    mapping(bytes32 => uint256)                         public eta;             // Candidate => Time for cast
-    mapping(address => uint256)                         public deposits;        // Voter => Voting power
-    mapping(address => uint256)                         public count;           // Voter => Amount of candidates voted
-    mapping(address => uint256)                         public last;            // Last time executed
+    // MKR gov token
+    TokenLike                                                               public gov;
+    // Total MKR locked
+    uint256                                                                 public supply;
+    // MKR locked expiration time (admin param)
+    uint256                                                                 public ttl;
+    // Duration of a candidate's validity in seconds (admin param)
+    uint256                                                                 public end;
+    // Min MKR stake for launching a vote (admin param)
+    uint256                                                                 public min;
+    // Min % of total locked MKR to approve a proposal (admin param)
+    uint256                                                                 public post;
+    // Voter => Delay => Action => Voted
+    mapping(address => mapping(mapping(address => address) => uint256))     public votes;
+    // Delay => Action => Amount of votes
+    mapping(mapping(address => address) => uint256)                         public approvals;
+    // Delay => Action => Expiration
+    mapping(mapping(address => address) => uint256)                         public expirations;
+    // Delay => Action => Plotted
+    mapping(mapping(address => address) => uint256)                         public plotted;
+    // Voter => Voting power
+    mapping(address => uint256)                                             public deposits;
+    // Voter => Amount of candidates voted
+    mapping(address => uint256)                                             public count;
+    // Last time executed
+    mapping(address => uint256)                                             public last;
 
-    uint256                                    constant public MIN_POST = 40;   // Min post value that admin can set
-    uint256                                    constant public MAX_POST = 60;   // Max post value that admin can set
+    // Min post value that admin can set
+    uint256                                                        constant public MIN_POST = 40;
+    // Max post value that admin can set
+    uint256                                                        constant public MAX_POST = 60;
 
     // warm account and renew expiration time
     modifier warm {
@@ -104,13 +119,11 @@ contract DssChief {
         if (usr != msg.sender) delete last[usr];
     }
 
-    function vote(address pause, address action) external {
-        // Generate hash pause/action
-        bytes32 whom = keccak256(abi.encodePacked(pause, action));
+    function vote(address delay, address action) external {
         // Check the whom candidate was not previously voted by msg.sender
-        require(votes[msg.sender][whom] == 0, "DssChief/candidate-already-voted");
+        require(votes[msg.sender][delay][action] == 0, "DssChief/candidate-already-voted");
         // If it's the first vote for this candidate, set the expiration time
-        if (expirations[whom] == 0) {
+        if (expirations[delay][action] == 0) {
             // Check min is set to 0 or
             // user deposits are >= than min value + it's not launching a vote
             // on the same block where another action happened
@@ -120,54 +133,49 @@ contract DssChief {
                 "DssChief/not-minimum-amount"
             );
             // Set expiration time
-            expirations[whom] = add(now, end);
+            expirations[delay][action] = add(now, end);
         }
         // Mark candidate as voted by msg.sender
-        votes[msg.sender][whom] = 1;
+        votes[msg.sender][delay][action] = 1;
         // Add voting power to the candidate
-        approvals[whom] = add(approvals[whom], deposits[msg.sender]);
+        approvals[delay][action] = add(approvals[delay][action], deposits[msg.sender]);
         // Increase the voting counter from msg.sender
         count[msg.sender] = add(count[msg.sender], 1);
     }
 
-    function undo(address usr, address pause, address action) external {
-        // Generate hash pause/action
-        bytes32 whom = keccak256(abi.encodePacked(pause, proposal));
+    function undo(address usr, address delay, address action) external {
         // Check the candidate whom is actually voted by usr
-        require(votes[usr][whom] == 1, "DssChief/candidate-not-voted");
+        require(votes[usr][delay][action] == 1, "DssChief/candidate-not-voted");
         // Verify usr is sender or their voting power is already expired
         require(
             usr == msg.sender || add(last[usr], ttl) < now,
             "DssChief/not-allowed-to-undo"
         );
         // Mark candidate as not voted for by usr
-        votes[usr][whom] = 0;
+        votes[usr][delay][action] = 0;
         // Remove voting power from the candidate
-        approvals[whom] = sub(approvals[whom], deposits[usr]);
+        approvals[delay][action] = sub(approvals[delay][action], deposits[usr]);
         // Decrease the voting counter from usr
         count[usr] = sub(count[usr], 1);
     }
 
-    function plot(address pause, address action) external {
-        // Generate hash pause/action
-        bytes32 whom = keccak256(abi.encodePacked(pause, action));
+    function plot(address delay, address action) external {
+        // Generate hash delay/action
         // Check enough MKR is voting this proposal and it's not already expired
-        require(approvals[whom] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
-        require(now <= expirations[whom], "vote-expired");
+        require(approvals[delay][action] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
+        require(now <= expirations[delay][action], "vote-expired");
         // Verify was not already plotted
-        require(eta[whom] == 0, "DssChief/action-already-plotted");
-        // Get execution time for the proposal
-        eta[whom] = now + PauseLike(pause).delay();
+        require(plotted[delay][action] == 0, "DssChief/action-already-plotted");
         // Plot action proposal
-        PauseLike(pause).plot(action, abi.encodeWithSignature("execute()"), eta[whom]);
+        plotted[delay][action] = 1;
+        DelayLike(delay).plot(action, eta[delay][action]);
     }
 
-    function drop(address pause, address action) external {
+    function drop(address delay, address action) external {
         // Check enough MKR is voting address(0) => which means Governance is in emergency mode
         require(approvals[address(0)] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
-        // Generate hash pause/action
-        bytes32 whom = keccak256(abi.encodePacked(pause, action));
         // Drop action proposal
-        PauseLike(pause).drop(action, abi.encodeWithSignature("execute()"), eta[whom]);
+        plotted[delay][action] = 0;
+        DelayLike(delay).drop(action);
     }
 }

@@ -173,7 +173,7 @@ contract DssChief {
 
     function drop(address delay, address action) external {
         // Check enough MKR is voting address(0) => which means Governance is in emergency mode
-        require(approvals[address(0)] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
+        require(approvals[address(0)][address(0)] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
         // Drop action proposal
         plotted[delay][action] = 0;
         DelayLike(delay).drop(action);

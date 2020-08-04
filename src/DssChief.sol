@@ -168,7 +168,7 @@ contract DssChief {
         require(plotted[delay][action] == 0, "DssChief/action-already-plotted");
         // Plot action proposal
         plotted[delay][action] = 1;
-        DelayLike(delay).plot(action, eta[delay][action]);
+        DelayLike(delay).plot(action);
     }
 
     function drop(address delay, address action) external {

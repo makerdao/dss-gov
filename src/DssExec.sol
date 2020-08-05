@@ -1,6 +1,6 @@
-pragma solidity ^0.5.12;
+pragma solidity ^0.6.7;
 
-contract DssDelay {
+contract DssExec {
     // --- Auth ---
     mapping (address => uint256)    public wards;
     function rely(address usr)      external wait { wards[usr] = 1; }
@@ -31,22 +31,21 @@ contract DssDelay {
         wards[msg.sender] = 1;
     }
 
-    function plot(address action) external auth returns (uint256 eta) {
-        eta = add(now, tic)
-        plan[action] = eta;
+    function plot(address action) external auth {
+        plan[action] = add(now, tic);
     }
 
     function drop(address action) external auth {
         plan[action] = 0;
     }
 
-    function exec(address action) external returns (bytes memory out) {
+    function exec(address action) external auth {
         require(plan[action] != 0,   "DssDelay/not-plotted");
         require(now >= plan[action], "DssDelay/not-delay-passed");
 
         plan[action] = 0;
         bool ok;
-        (ok, out) = action.delegatecall(abi.encodeWithSignature("execute()"););
+        (ok, ) = action.delegatecall(abi.encodeWithSignature("execute()"));
         require(ok, "DssDelay/delegatecall-error");
     }
 }

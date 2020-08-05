@@ -1,14 +1,15 @@
-pragma solidity ^0.5.12;
+pragma solidity ^0.6.7;
 
-contract TokenLike {
+interface TokenLike {
     function transferFrom(address, address, uint256) external;
     function transfer(address, uint256) external;
 }
 
-contract DelayLike {
+interface ExecLike {
     function delay() external view returns (uint256);
-    function drop(address, bytes memory, uint256) external;
-    function plot(address, bytes memory, uint256) external returns (uint256);
+    function drop(address) external;
+    function exec(address) external returns (uint256);
+    function plot(address) external returns (uint256);
 }
 
 contract DssChief {
@@ -21,42 +22,42 @@ contract DssChief {
         _;
     }
 
-    // MKR gov token
-    TokenLike                                                               public gov;
-    // Total MKR locked
-    uint256                                                                 public supply;
-    // MKR locked expiration time (admin param)
-    uint256                                                                 public ttl;
-    // Duration of a candidate's validity in seconds (admin param)
-    uint256                                                                 public end;
-    // Min MKR stake for launching a vote (admin param)
-    uint256                                                                 public min;
-    // Min % of total locked MKR to approve a proposal (admin param)
-    uint256                                                                 public post;
-    // Voter => Delay => Action => Voted
-    mapping(address => mapping(mapping(address => address) => uint256))     public votes;
-    // Delay => Action => Amount of votes
-    mapping(mapping(address => address) => uint256)                         public approvals;
-    // Delay => Action => Expiration
-    mapping(mapping(address => address) => uint256)                         public expirations;
-    // Delay => Action => Plotted
-    mapping(mapping(address => address) => uint256)                         public plotted;
-    // Voter => Voting power
-    mapping(address => uint256)                                             public deposits;
-    // Voter => Amount of candidates voted
-    mapping(address => uint256)                                             public count;
-    // Last time executed
-    mapping(address => uint256)                                             public last;
+    struct Proposal {
+        uint256 blockNum;
+        uint256 end;
+        address exec;
+        address action;
+        uint256 totActive;
+        uint256 rights;
+        mapping(address => uint256) votes;
+        uint256 status;
+    }
 
-    // Min post value that admin can set
-    uint256                                                        constant public MIN_POST = 40;
-    // Max post value that admin can set
-    uint256                                                        constant public MAX_POST = 60;
+    struct Snapshot {
+        uint256 fromBlock;
+        uint256 rights;
+    }
 
-    // warm account and renew expiration time
+    TokenLike                                        public gov;           // MKR gov token
+    uint256                                          public ttl;           // MKR locked expiration time (admin param)
+    uint256                                          public end;           // Duration of a candidate's validity in seconds (admin param)
+    uint256                                          public min;           // Min MKR stake for launching a vote (admin param)
+    uint256                                          public post;          // Min % of total locked MKR to approve a proposal (admin param)
+    mapping(address => uint256)                      public deposits;      // User => MKR deposited
+    uint256                                          public totActive;     // Total active MKR
+    mapping(address => uint256)                      public active;        // User => Active MKR (Yes/No)
+    mapping(address => uint256)                      public last;          // Last time executed
+    uint256                                          public proposalsNum;  // Amount of Proposals
+    mapping(uint256 => Proposal)                     public proposals;     // List of proposals
+    mapping(address => uint256)                      public snapshotsNum;  // User => Amount of snapshots
+    mapping(address => mapping(uint256 => Snapshot)) public snapshots;     // User => Index => Snapshot
+
+    uint256                                 constant public MIN_POST = 40; // Min post value that admin can set
+    uint256                                 constant public MAX_POST = 60; // Max post value that admin can set
+
     modifier warm {
         _;
-        last[msg.sender] = now;
+        last[msg.sender] = block.timestamp;
     }
 
     function add(uint256 x, uint256 y) internal pure returns (uint256 z) {
@@ -87,95 +88,166 @@ contract DssChief {
         else revert("DssChief/file-unrecognized-param");
     }
 
+    function _save(address user, uint256 wad) internal {
+        uint256 num = snapshotsNum[user];
+
+        if (num > 0 && snapshots[user][num].fromBlock == block.number) {
+            snapshots[user][num].rights = wad;
+        } else {
+            num = snapshotsNum[user] = add(snapshotsNum[user], 1);
+            snapshots[user][num] = Snapshot(block.number, wad);
+        }
+    }
+
     function lock(uint256 wad) external warm {
-        // Can't lock more MKR if msg.sender is already voting candidates
-        require(count[msg.sender] == 0, "DssChief/existing-voted-candidates");
         // Pull collateral from sender's wallet
         gov.transferFrom(msg.sender, address(this), wad);
+
         // Increase amount deposited from sender
-        deposits[msg.sender] = add(deposits[msg.sender], wad);
-        // Increase total supply
-        supply = add(supply, wad);
-    }
+        uint256 deposit = add(deposits[msg.sender], wad);
+        deposits[msg.sender] = deposit;
 
-    function free(address usr, uint256 wad) external warm {
-        // Can't free MKR if usr is still voting candidates
-        require(count[usr] == 0, "DssChief/existing-voted-candidates");
-        // Verify usr is sender or their voting power is already expired
-        require(
-            usr == msg.sender || add(last[usr], ttl) < now,
-            "DssChief/not-allowed-to-free"
-        );
-        // Verify is not freeing on same block where another action happened
-        // (to avoid usage of flash loans)
-        require(last[usr] < now, "DssChief/not-minimum-time-passed");
-        // Decrease amount deposited from usr
-        deposits[usr] = sub(deposits[usr], wad);
-        // Decrease total supply
-        supply = sub(supply, wad);
-        // Push token back to usr's wallet
-        gov.transfer(usr, wad);
-        // Clean storage if usr is not the sender (for gas refund)
-        if (usr != msg.sender) delete last[usr];
-    }
-
-    function vote(address delay, address action) external {
-        // Check the whom candidate was not previously voted by msg.sender
-        require(votes[msg.sender][delay][action] == 0, "DssChief/candidate-already-voted");
-        // If it's the first vote for this candidate, set the expiration time
-        if (expirations[delay][action] == 0) {
-            // Check min is set to 0 or
-            // user deposits are >= than min value + it's not launching a vote
-            // on the same block where another action happened
-            // (to avoid usage of flash loans)
-            require(
-                min == 0 || deposits[msg.sender] >= min && last[msg.sender] < now,
-                "DssChief/not-minimum-amount"
-            );
-            // Set expiration time
-            expirations[delay][action] = add(now, end);
+        // Update active MKR that counts for passing proposals
+        if (active[msg.sender] == 1) {
+            totActive = add(totActive, wad);
+        } else {
+            active[msg.sender] = 1;
+            totActive = add(totActive, deposit);
         }
-        // Mark candidate as voted by msg.sender
-        votes[msg.sender][delay][action] = 1;
-        // Add voting power to the candidate
-        approvals[delay][action] = add(approvals[delay][action], deposits[msg.sender]);
-        // Increase the voting counter from msg.sender
-        count[msg.sender] = add(count[msg.sender], 1);
+
+        // Save snapshot
+        _save(msg.sender, deposit);
     }
 
-    function undo(address usr, address delay, address action) external {
-        // Check the candidate whom is actually voted by usr
-        require(votes[usr][delay][action] == 1, "DssChief/candidate-not-voted");
-        // Verify usr is sender or their voting power is already expired
-        require(
-            usr == msg.sender || add(last[usr], ttl) < now,
-            "DssChief/not-allowed-to-undo"
-        );
-        // Mark candidate as not voted for by usr
-        votes[usr][delay][action] = 0;
-        // Remove voting power from the candidate
-        approvals[delay][action] = sub(approvals[delay][action], deposits[usr]);
-        // Decrease the voting counter from usr
-        count[usr] = sub(count[usr], 1);
+    function free(uint256 wad) external warm {
+        // Verify is not freeing on same block which another action previously happened
+        // (to avoid usage of flash loans)
+        require(last[msg.sender] < block.timestamp, "DssChief/not-minimum-time-passed");
+
+        // Decrease amount deposited from user
+        uint256 deposit = sub(deposits[msg.sender], wad);
+        deposits[msg.sender] = deposit;
+
+        // Update active MKR that counts for passing proposals
+        if (active[msg.sender] == 1) {
+            totActive = sub(totActive, wad);
+        } else {
+            active[msg.sender] = 1;
+            totActive = add(totActive, deposit);
+        }
+
+        // Save snapshot
+        _save(msg.sender, deposit);
+
+        // Push token back to user's wallet
+        gov.transfer(msg.sender, wad);
     }
 
-    function plot(address delay, address action) external {
-        // Generate hash delay/action
-        // Check enough MKR is voting this proposal and it's not already expired
-        require(approvals[delay][action] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
-        require(now <= expirations[delay][action], "vote-expired");
-        // Verify was not already plotted
-        require(plotted[delay][action] == 0, "DssChief/action-already-plotted");
+    function ping() external warm {
+        require(active[msg.sender] == 0, "DssChief/user-already-active");
+        uint256 deposit = deposits[msg.sender];
+
+        totActive = add(totActive, deposit);
+        active[msg.sender] = 1;
+
+        // Save snapshot
+        _save(msg.sender, deposit);
+    }
+
+    function clear(address usr) external {
+        require(add(last[usr], ttl) < block.timestamp, "DssChief/not-allowed-to-clear");
+        require(active[usr] == 1, "DssChief/user-already-cleared");
+
+        totActive = sub(totActive, deposits[usr]);
+        active[usr] = 0;
+
+        // Save snapshot
+        _save(usr, 0);
+    }
+
+    function propose(address exec_, address action_) external warm returns (uint256) {
+        uint256 deposit = deposits[msg.sender];
+        require(deposit >= min, "DssChief/not-minimum-amount");
+
+        // TODO: Allow only one active proposal per user and add some time lock in free for withdrawing the MKR
+        // after making a proposal
+
+        // Reactive locked MKR if was inactive
+        if (active[msg.sender] == 0) {
+            totActive = add(totActive, deposit);
+            active[msg.sender] = 1;
+            // Save snapshot
+            _save(msg.sender, deposit);
+        }
+
+        // Add new proposal
+        proposalsNum = add(proposalsNum, 1);
+        proposals[proposalsNum] = Proposal({
+                blockNum: block.number,
+                end: add(block.timestamp, end),
+                exec: exec_,
+                action: action_,
+                totActive: totActive,
+                rights: 0,
+                status: 0
+        });
+
+        return proposalsNum;
+    }
+
+    function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 rights) {
+        uint256 num = snapshotsNum[usr];
+        require(num >= index, "DssChief/not-existing-index");
+        Snapshot memory snapshot = snapshots[usr][index];
+        require(snapshot.fromBlock <= blockNum, "DssChief/not-correct-snapshot-1");
+        require(index == num || snapshots[usr][index + 1].fromBlock > blockNum, "DssChief/not-correct-snapshot-2");
+
+        rights = snapshot.rights;
+    }
+
+    function vote(uint256 id, uint256 wad, uint256 sIndex) external warm {
+        // Verify it hasn't been already plotted, not executed nor removed
+        require(proposals[id].status == 0, "DssChief/wrong-status");
+        // Verify proposal is not expired
+        require(proposals[id].end >= block.timestamp, "DssChief/proposal-expired");
+        // Verify amount for voting is lower or equal than voting rights
+        require(wad <= _getUserRights(msg.sender, sIndex, proposals[id].blockNum), "DssChief/amount-exceeds-rights");
+
+        uint256 prev = proposals[id].votes[msg.sender];
+        // Update voting rights used by the user
+        proposals[id].votes[msg.sender] = wad;
+        // Update voting rights to the proposal
+        proposals[id].rights = add(sub(proposals[id].rights, prev), wad);
+    }
+
+    function plot(uint256 id) external warm {
+        // Verify it hasn't been already plotted or removed
+        require(proposals[id].status == 0, "DssChief/wrong-status");
+        // Verify proposal is not expired
+        require(block.timestamp <= proposals[id].end, "DssChief/vote-expired");
+        // Verify enough MKR is voting this proposal
+        require(proposals[id].rights > mul(proposals[id].totActive, post) / 100, "DssChief/not-enough-voting-rights");
+
         // Plot action proposal
-        plotted[delay][action] = 1;
-        DelayLike(delay).plot(action, eta[delay][action]);
+        proposals[id].status = 1;
+        ExecLike(proposals[id].exec).plot(proposals[id].action);
     }
 
-    function drop(address delay, address action) external {
-        // Check enough MKR is voting address(0) => which means Governance is in emergency mode
-        require(approvals[address(0)][address(0)] > mul(supply, post) / 100, "DssChief/not-enough-voting-power");
+    function exec(uint256 id) external warm {
+        // Verify it has been already plotted, but not executed or removed
+        require(proposals[id].status == 1, "DssChief/wrong-status");
+
+        // Execute action proposal
+        proposals[id].status = 2;
+        ExecLike(proposals[id].exec).exec(proposals[id].action);
+    }
+
+    function drop(uint256 id) external auth {
+        // Verify it hasn't been already removed
+        require(proposals[id].status < 3, "DssChief/wrong-status");
+
         // Drop action proposal
-        plotted[delay][action] = 0;
-        DelayLike(delay).drop(action);
+        proposals[id].status = 3;
+        ExecLike(proposals[id].exec).drop(proposals[id].action);
     }
 }

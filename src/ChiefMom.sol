@@ -5,23 +5,17 @@ interface ChiefLike {
 }
 
 contract ChiefMom {
-    // --- Auth ---
-    mapping (address => uint256)    public wards;
-    function rely(address usr)      external auth { wards[usr] = 1; }
-    function deny(address usr)      external auth { wards[usr] = 0; }
-    modifier auth {
-        require(wards[msg.sender] == 1, "DssChief/not-authorized");
-        _;
-    }
+    address   immutable public owner;
+    ChiefLike immutable public chief;
 
-    ChiefLike chief;
+    modifier onlyOwner { require(msg.sender == owner, "ChiefMom/only-owner"); _;}
 
-    constructor(address chief_) public {
+    constructor(address owner_, address chief_) public {
+        owner = owner_;
         chief = ChiefLike(chief_);
-        wards[msg.sender] = 1;
     }
 
-    function drop(uint256 id) external auth {
+    function drop(uint256 id) external onlyOwner {
         chief.drop(id);
     }
 }

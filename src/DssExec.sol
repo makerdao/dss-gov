@@ -1,51 +1,70 @@
 pragma solidity ^0.6.7;
 
-contract DssExec {
-    // --- Auth ---
-    mapping (address => uint256)    public wards;
-    function rely(address usr)      external wait { wards[usr] = 1; }
-    function deny(address usr)      external wait { wards[usr] = 0; }
-    modifier auth {
-        require(wards[msg.sender] == 1, "DssDelay/not-authorized");
-        _;
-    }
-    modifier wait {
-        require(msg.sender == address(this), "DssDelay/undelayed-call");
+contract Scheduler {
+    address immutable public owner;
+
+    mapping (address => uint256) public time;
+
+    modifier onlyOwner {
+        require(msg.sender == owner, "DssExecMom/only-owner");
         _;
     }
 
-    uint256 public tic;
-    mapping (address => uint256) public plan;
+    constructor() public {
+        owner = msg.sender;
+    }
+
+    function setAction(address action_, uint256 time_) external onlyOwner {
+        time[action_] = time_;
+    }
+}
+
+contract DssExec {
+    // As they are immutable can not be changed in the delegatecall
+    address   immutable public owner;
+    uint256   immutable public tic;
+    Scheduler immutable public scheduler;
+
+    modifier onlyOwner {
+        require(msg.sender == owner, "DssExecMom/only-owner");
+        _;
+    }
 
     function add(uint256 x, uint256 y) internal pure returns (uint256 z) {
         require((z = x + y) >= x);
     }
 
-    function file(bytes32 what, uint256 data) public wait {
-        if (what == "tic") tic = data;
-        else revert("DssChief/file-unrecognized-param");
-    }
-
-    constructor(uint256 tic_) public {
+    constructor(address owner_, uint256 tic_) public {
+        owner = owner_;
         tic = tic_;
-        wards[msg.sender] = 1;
+        // If tic == 0 then Scheduler will not be used
+        scheduler = tic_ > 0 ? new Scheduler() : Scheduler(address(0));
     }
 
-    function plot(address action) external auth {
-        plan[action] = add(now, tic);
+    function plot(address action) external onlyOwner {
+        if (tic > 0) {
+            require(scheduler.time(action) == 0, "DssExec/action-already-plotted");
+            scheduler.setAction(action, add(block.timestamp, tic));
+        }
     }
 
-    function drop(address action) external auth {
-        plan[action] = 0;
+    function drop(address action) external onlyOwner {
+        if (tic > 0) {
+            scheduler.setAction(action, 0);
+        }
     }
 
-    function exec(address action) external auth {
-        require(plan[action] != 0,   "DssDelay/not-plotted");
-        require(now >= plan[action], "DssDelay/not-delay-passed");
+    function exec(address action) external onlyOwner {
+        if (tic > 0) {
+            uint256 time = scheduler.time(action);
+            require(time != 0,   "DssExec/not-plotted");
+            require(now >= time, "DssExec/not-delay-passed");
 
-        plan[action] = 0;
+            scheduler.setAction(action, 0);
+        }
+
         bool ok;
         (ok, ) = action.delegatecall(abi.encodeWithSignature("execute()"));
-        require(ok, "DssDelay/delegatecall-error");
+        require(ok, "DssExec/delegatecall-error");
     }
 }

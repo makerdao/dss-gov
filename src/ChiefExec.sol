@@ -6,7 +6,7 @@ contract Scheduler {
     mapping (address => uint256) public time;
 
     modifier onlyOwner {
-        require(msg.sender == owner, "DssExecMom/only-owner");
+        require(msg.sender == owner, "ChiefExec/only-owner");
         _;
     }
 
@@ -19,14 +19,14 @@ contract Scheduler {
     }
 }
 
-contract DssExec {
+contract ChiefExec {
     // As they are immutable can not be changed in the delegatecall
     address   immutable public owner;
     uint256   immutable public tic;
     Scheduler immutable public scheduler;
 
     modifier onlyOwner {
-        require(msg.sender == owner, "DssExecMom/only-owner");
+        require(msg.sender == owner, "ChiefExec/only-owner");
         _;
     }
 
@@ -43,7 +43,7 @@ contract DssExec {
 
     function plot(address action) external onlyOwner {
         if (tic > 0) {
-            require(scheduler.time(action) == 0, "DssExec/action-already-plotted");
+            require(scheduler.time(action) == 0, "ChiefExec/action-already-plotted");
             scheduler.setAction(action, add(block.timestamp, tic));
         }
     }
@@ -57,14 +57,14 @@ contract DssExec {
     function exec(address action) external onlyOwner {
         if (tic > 0) {
             uint256 time = scheduler.time(action);
-            require(time != 0,   "DssExec/not-plotted");
-            require(now >= time, "DssExec/not-delay-passed");
+            require(time != 0,   "ChiefExec/not-plotted");
+            require(now >= time, "ChiefExec/not-delay-passed");
 
             scheduler.setAction(action, 0);
         }
 
         bool ok;
         (ok, ) = action.delegatecall(abi.encodeWithSignature("execute()"));
-        require(ok, "DssExec/delegatecall-error");
+        require(ok, "ChiefExec/delegatecall-error");
     }
 }

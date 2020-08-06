@@ -165,7 +165,7 @@ contract DssChief {
         _save(usr, 0);
     }
 
-    function propose(address exec_, address action_) external warm returns (uint256) {
+    function propose(address exec, address action) external warm returns (uint256) {
         uint256 deposit = deposits[msg.sender];
         require(deposit >= min, "DssChief/not-minimum-amount");
 
@@ -185,8 +185,8 @@ contract DssChief {
         proposals[proposalsNum] = Proposal({
                 blockNum: block.number,
                 end: add(block.timestamp, end),
-                exec: exec_,
-                action: action_,
+                exec: exec,
+                action: action,
                 totActive: totActive,
                 rights: 0,
                 status: 0

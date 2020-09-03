@@ -40,6 +40,7 @@ contract DssChief {
 
     TokenLike                                        public gov;           // MKR gov token
     uint256                                          public ttl;           // MKR locked expiration time (admin param)
+    uint256                                          public tic;           // Min time after making a proposal for a second one or freeing MKR (admin param)
     uint256                                          public end;           // Duration of a candidate's validity in seconds (admin param)
     uint256                                          public min;           // Min MKR stake for launching a vote (admin param)
     uint256                                          public post;          // Min % of total locked MKR to approve a proposal (admin param)
@@ -50,6 +51,7 @@ contract DssChief {
     mapping(address => uint256)                      public active;        // User => Active MKR (Yes/No)
     mapping(address => uint256)                      public last;          // Last time executed
     uint256                                          public proposalsNum;  // Amount of Proposals
+    mapping(address => uint256)                      public locked;        // User => Time to be able to free MKR or make a new proposal
     mapping(uint256 => Proposal)                     public proposals;     // List of proposals
     mapping(address => uint256)                      public snapshotsNum;  // User => Amount of snapshots
     mapping(address => mapping(uint256 => Snapshot)) public snapshots;     // User => Index => Snapshot
@@ -81,6 +83,7 @@ contract DssChief {
 
     function file(bytes32 what, uint256 data) public auth {
         if (what == "ttl") ttl = data;
+        else if (what == "tic") tic = data; // TODO: Define if we want to place a safe max time
         else if (what == "end") end = data;
         else if (what == "min") min = data;
         else if (what == "post") {
@@ -148,9 +151,8 @@ contract DssChief {
     }
 
     function free(uint256 wad) external warm {
-        // Verify is not freeing on same block which another action previously happened
-        // (to avoid usage of flash loans)
-        require(last[msg.sender] < block.timestamp, "DssChief/not-minimum-time-passed");
+        // Check if user has not made recently a proposal
+        require(locked[msg.sender] <= block.timestamp, "DssChief/user-locked");
 
         // Decrease amount deposited from user
         uint256 deposit = sub(deposits[msg.sender], wad);
@@ -235,11 +237,14 @@ contract DssChief {
     }
 
     function propose(address exec, address action) external warm returns (uint256) {
+        // Check if user has at the least the min amount of MKR for creating a proposal
         uint256 deposit = deposits[msg.sender];
         require(deposit >= min, "DssChief/not-minimum-amount");
+        // Check if user has not made recently another proposal
+        require(locked[msg.sender] <= block.timestamp, "DssChief/user-locked");
 
-        // TODO: Allow only one active proposal per user and add some time lock in free for withdrawing the MKR
-        // after making a proposal
+        // Update locked time
+        locked[msg.sender] = add(block.timestamp, tic);
 
         // Reactive locked MKR if was inactive
         if (active[msg.sender] == 0) {
@@ -264,14 +269,14 @@ contract DssChief {
         return proposalsNum;
     }
 
-    function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 rights) {
+    function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 amount) {
         uint256 num = snapshotsNum[usr];
         require(num >= index, "DssChief/not-existing-index");
         Snapshot memory snapshot = snapshots[usr][index];
-        require(snapshot.fromBlock <= blockNum, "DssChief/not-correct-snapshot-1");
-        require(index == num || snapshots[usr][index + 1].fromBlock > blockNum, "DssChief/not-correct-snapshot-2");
+        require(snapshot.fromBlock < blockNum, "DssChief/not-correct-snapshot-1"); // "<" protects for flash loans on voting
+        require(index == num || snapshots[usr][index + 1].fromBlock >= blockNum, "DssChief/not-correct-snapshot-2");
 
-        rights = snapshot.rights;
+        amount = snapshot.rights;
     }
 
     function vote(uint256 id, uint256 wad, uint256 sIndex) external warm {

@@ -94,8 +94,6 @@ contract DssChief {
     }
 
     function _save(address usr, uint256 wad) internal {
-        rights[usr] = wad;
-
         uint256 num = snapshotsNum[usr];
         if (num > 0 && snapshots[usr][num].fromBlock == block.number) {
             snapshots[usr][num].rights = wad;
@@ -106,46 +104,64 @@ contract DssChief {
     }
 
     function delegate(address usr) external warm {
-        address delegated = delegation[msg.sender];
-        uint256 deposit = deposits[msg.sender];
-        // If already existed a delegated address
-        if (delegated != address(0)) {
-            // Remove msg.sender deposits from its voting rights
-            _save(delegated, sub(rights[delegated], deposit));
-        }
-        // Add msg.sender deposits to the voting rights of new delegated usr
-        _save(usr, add(rights[usr], deposit));
+        // Get actual delegated address
+        address prev = delegation[msg.sender];
+        // Verify it is not trying to set again the actual address
+        require(usr != prev, "DssChief-already-delegated");
+
         // Set new delegated address
         delegation[msg.sender] = usr;
+
+        // Get sender deposits
+        uint256 deposit = deposits[msg.sender];
+
+        bool activePrev = prev != address(0) && active[prev] == 1;
+        bool activeUsr = usr != address(0) && active[usr] == 1;
+
+        // If both are active or inactive, do nothing. Otherwise change the totActive MKR
+        if (activePrev && !activeUsr) {
+            totActive = sub(totActive, deposit);
+        } else if (!activePrev && activeUsr) {
+            totActive = add(totActive, deposit);
+        }
+
+        // If already existed a delegated address
+        if (prev != address(0)) {
+            // Remove sender's deposits from old delegated's voting rights
+            rights[prev] = sub(rights[prev], deposit);
+            // If active, save snapshot
+            if(activePrev) {
+                _save(prev, rights[prev]);
+            }
+        }
+
+        // If setting to some delegated address
+        if (usr != address(0)) {
+            // Add sender's deposits to the new delegated's voting rights
+            rights[usr] = add(rights[usr], deposit);
+            // If active, save snapshot
+            if(activeUsr) {
+                _save(usr, rights[usr]);
+            }
+        }
     }
 
     function lock(uint256 wad) external warm {
-        // Pull collateral from sender's wallet
+        // Pull MKR from sender's wallet
         gov.transferFrom(msg.sender, address(this), wad);
 
         // Increase amount deposited from sender
-        uint256 deposit = add(deposits[msg.sender], wad);
-        deposits[msg.sender] = deposit;
+        deposits[msg.sender] = add(deposits[msg.sender], wad);
 
         // Get actual delegated address
         address delegated = delegation[msg.sender];
 
-        // Update active MKR that counts for approving proposals
-        // and voting rights of delegated address
-        if (active[msg.sender] == 1) {
-            // Update total active
-            totActive = add(totActive, wad);
-            // Save delegated voting rights status
-            if (delegated != address(0)) {
-                _save(delegated, add(rights[delegated], wad));
-            }
-        } else {
-            // Update total active
-            active[msg.sender] = 1;
-            totActive = add(totActive, deposit);
-            // Save delegated voting rights status
-            if (delegated != address(0)) {
-                _save(delegated, add(rights[delegated], deposit));
+        // If there is some delegated address
+        if (delegated != address(0)) {
+            rights[delegated] = add(rights[delegated], wad);
+            if(active[delegated] == 1) {
+                _save(delegated, rights[delegated]);
+                totActive = add(totActive, wad);
             }
         }
     }
@@ -155,85 +171,54 @@ contract DssChief {
         require(locked[msg.sender] <= block.timestamp, "DssChief/user-locked");
 
         // Decrease amount deposited from user
-        uint256 deposit = sub(deposits[msg.sender], wad);
-        deposits[msg.sender] = deposit;
+        deposits[msg.sender] = sub(deposits[msg.sender], wad);
 
         // Get actual delegated address
         address delegated = delegation[msg.sender];
 
-        // Update active MKR that counts for approving proposals
-        // and voting rights of delegated address
-        if (active[msg.sender] == 1) {
-            // Update total active
-            totActive = sub(totActive, wad);
-            // Save delegated voting rights status
-            if (delegated != address(0)) {
-                _save(delegated, sub(rights[delegated], wad));
-            }
-        } else {
-            // Update total active
-            active[msg.sender] = 1;
-            totActive = add(totActive, deposit);
-            // Save delegated voting rights status
-            if (delegated != address(0)) {
-                _save(delegated, add(rights[delegated], deposit));
+        // If there is some delegated address
+        if (delegated != address(0)) {
+            rights[delegated] = sub(rights[delegated], wad);
+            if(active[delegated] == 1) {
+                _save(delegated, rights[delegated]);
+                totActive = sub(totActive, wad);
             }
         }
 
-        // Push token back to user's wallet
+        // Push MKR back to user's wallet
         gov.transfer(msg.sender, wad);
     }
 
-    function ping(address usr) external warm {
-        // If already active return
-        if (active[usr] == 1) return;
-
-        // Get delegated address
-        address delegated = delegation[usr];
-
-        // Check only the owner or the delegated can reactive the MKR
-        require(msg.sender == usr || msg.sender == delegated, "DssChief/not-allowed-to-activate");
-
-        // Get owner's deposited MKR amount
-        uint256 deposit = deposits[usr];
-
-        // Add the amount from the total active MKR
-        totActive = add(totActive, deposit);
-        // Mark the user as active
-        active[usr] = 1;
-
-        // Save delegated voting rights status
-        if (delegated != address(0)) {
-            _save(delegated, add(rights[delegated], deposit));
-        }
-    }
 
     function clear(address usr) external {
         // If already inactive return
         if (active[usr] == 0) return;
 
-        // Get delegated address
-        address delegated = delegation[usr];
-
         // Check the owner of the MKR and the delegated have not made any recent action
-        require(
-            add(last[usr], ttl) < block.timestamp &&
-            (delegated == address(0) || add(last[delegated], ttl) < block.timestamp),
-            "DssChief/not-allowed-to-clear"
-        );
+        require(add(last[usr], ttl) < block.timestamp, "DssChief/not-allowed-to-clear");
 
-        // Get owner's deposited MKR amount
-        uint256 deposit = deposits[usr];
-
-        // Remove the amount from the total active MKR
-        totActive = sub(totActive, deposit);
-        // Mark the user as inactive
+        // Mark user as inactive
         active[usr] = 0;
 
-        // Save delegated voting rights status
-        if (delegated != address(0)) {
-            _save(delegated, sub(rights[delegated], deposit));
-        }
+        // Remove the amount from the total active MKR
+        totActive = sub(totActive, rights[usr]);
+        // Save snapshot
+        _save(usr, 0);
+    }
+
+    function ping() external warm {
+        // If already active return
+        if (active[msg.sender] == 1) return;
+
+        // Mark the user as active
+        active[msg.sender] = 1;
+
+        uint256 r = rights[msg.sender];
+
+        // Add the amount from the total active MKR
+        totActive = add(totActive, r);
+        // Save snapshot
+        _save(msg.sender, r);
     }
 
     function propose(address exec, address action) external warm returns (uint256) {

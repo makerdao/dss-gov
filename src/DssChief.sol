@@ -48,7 +48,7 @@ contract DssChief {
     mapping(address => address)                      public delegation;    // User => Delegated User
     mapping(address => uint256)                      public rights;        // User => Voting rights
     uint256                                          public totActive;     // Total active MKR
-    mapping(address => uint256)                      public active;        // User => Active MKR (Yes/No)
+    mapping(address => uint256)                      public active;        // User => Active delegated MKR (Yes/No)
     mapping(address => uint256)                      public last;          // Last time executed
     uint256                                          public proposalsNum;  // Amount of Proposals
     mapping(address => uint256)                      public locked;        // User => Time to be able to free MKR or make a new proposal

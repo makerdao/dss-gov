@@ -51,9 +51,9 @@ contract DssChief {
     mapping(address => mapping(uint256 => Snapshot)) public snapshots;     // User => Index => Snapshot
 
     // Constants
-    uint256 constant public SETUP_THRESHOLD = 100000 ether; // Min amount of totalActive MKR to launch the system
-    uint256 constant public MIN_POST        = 40;           // Min post value that admin can set
-    uint256 constant public MAX_POST        = 60;           // Max post value that admin can set
+    uint256 constant public LAUNCH_THRESHOLD = 100000 ether; // Min amount of totalActive MKR to launch the system
+    uint256 constant public MIN_POST         = 40;           // Min post value that admin can set
+    uint256 constant public MAX_POST         = 60;           // Max post value that admin can set
 
     modifier warm {
         _;
@@ -230,18 +230,26 @@ contract DssChief {
         _save(msg.sender, r);
     }
 
+    function launch() external {
+        // Check system hasn't already been launched
+        require(live == 0, "DssChief/already-launched");
+
+        // Check totalActive MKR has passed the min Setup Threshold
+        require(totActive >= LAUNCH_THRESHOLD, "DssChief/not-minimum");
+
+        // Launch system
+        live = 1;
+    }
+
     function propose(address exec, address action) external warm returns (uint256) {
-        // Check if system was already launched
-        if (live == 0) {
-            // If not yet, check the totalActive MKR has passed the min Setup Threshold
-            require(totActive >= SETUP_THRESHOLD);
-            // Launch system
-            live = 1;
-        }
-        // Check if user has at the least the min amount of MKR for creating a proposal
+        // Check system is live
+        require(live == 1, "DssChief/not-launched");
+
+        // Check user has at least the min amount of MKR for creating a proposal
         uint256 deposit = deposits[msg.sender];
         require(deposit >= min, "DssChief/not-minimum-amount");
-        // Check if user has not made recently another proposal
+
+        // Check user has not made another proposal recently
         require(locked[msg.sender] <= block.timestamp, "DssChief/user-locked");
 
         // Update locked time

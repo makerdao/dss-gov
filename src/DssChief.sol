@@ -179,7 +179,7 @@ contract DssChief {
         // If there is some delegated address
         if (delegated != address(0)) {
             rights[delegated] = sub(rights[delegated], wad);
-            if(active[delegated] == 1) {
+            if (active[delegated] == 1) {
                 _save(delegated, rights[delegated]);
                 totActive = sub(totActive, wad);
             }

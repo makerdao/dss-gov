@@ -247,14 +247,6 @@ contract DssChief {
         // Update locked time
         locked[msg.sender] = add(block.timestamp, tic);
 
-        // Reactive locked MKR if was inactive
-        if (active[msg.sender] == 0) {
-            totActive = add(totActive, deposit);
-            active[msg.sender] = 1;
-            // Save snapshot
-            _save(msg.sender, deposit);
-        }
-
         // Add new proposal
         proposalsNum = add(proposalsNum, 1);
         proposals[proposalsNum] = Proposal({

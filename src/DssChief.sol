@@ -42,7 +42,7 @@ contract DssChief {
     mapping(address => address)                      public delegation;    // User => Delegated User
     mapping(address => uint256)                      public rights;        // User => Voting rights
     uint256                                          public totActive;     // Total active MKR
-    mapping(address => uint256)                      public active;        // User => Active delegated MKR (Yes/No)
+    mapping(address => uint256)                      public active;        // User => 1 if User is active, otherwise 0
     mapping(address => uint256)                      public last;          // Last time executed
     uint256                                          public proposalsNum;  // Amount of Proposals
     mapping(address => uint256)                      public locked;        // User => Time to be able to free MKR or make a new proposal
@@ -107,7 +107,7 @@ contract DssChief {
         if (num > 0 && snapshots[usr][num].fromBlock == block.number) {
             snapshots[usr][num].rights = wad;
         } else {
-            num = snapshotsNum[usr] = add(snapshotsNum[usr], 1);
+            snapshotsNum[usr] = num = add(num, 1);
             snapshots[usr][num] = Snapshot(block.number, wad);
         }
     }
@@ -168,7 +168,7 @@ contract DssChief {
         // If there is some delegated address
         if (delegated != address(0)) {
             rights[delegated] = add(rights[delegated], wad);
-            if(active[delegated] == 1) {
+            if (active[delegated] == 1) {
                 _save(delegated, rights[delegated]);
                 totActive = add(totActive, wad);
             }
@@ -188,7 +188,7 @@ contract DssChief {
         // If there is some delegated address
         if (delegated != address(0)) {
             rights[delegated] = sub(rights[delegated], wad);
-            if(active[delegated] == 1) {
+            if (active[delegated] == 1) {
                 _save(delegated, rights[delegated]);
                 totActive = sub(totActive, wad);
             }

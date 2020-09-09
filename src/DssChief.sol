@@ -13,6 +13,9 @@ interface ExecLike {
 }
 
 contract DssChief {
+
+    // Structs:
+
     struct Proposal {
         uint256 blockNum;
         uint256 end;
@@ -29,7 +32,9 @@ contract DssChief {
         uint256 rights;
     }
 
-    // Storage variables
+
+    // Storage variables:
+
     mapping(address => uint256)                      public wards;         // Authorized addresses
     uint256                                          public live;          // System liveness
     TokenLike                                        public gov;           // MKR gov token
@@ -50,20 +55,71 @@ contract DssChief {
     mapping(address => uint256)                      public snapshotsNum;  // User => Amount of snapshots
     mapping(address => mapping(uint256 => Snapshot)) public snapshots;     // User => Index => Snapshot
 
-    // Constants
+
+    // Constants:
+
     uint256 constant public LAUNCH_THRESHOLD = 100000 ether; // Min amount of totalActive MKR to launch the system
     uint256 constant public MIN_POST         = 40;           // Min post value that admin can set
     uint256 constant public MAX_POST         = 60;           // Max post value that admin can set
+
+
+    // Modifiers:
+
+    modifier auth {
+        require(wards[msg.sender] == 1, "DssChief/not-authorized");
+        _;
+    }
 
     modifier warm {
         _;
         last[msg.sender] = block.timestamp;
     }
 
-    modifier auth {
-        require(wards[msg.sender] == 1, "DssChief/not-authorized");
-        _;
+
+    // Internal functions:
+
+    function _add(uint256 x, uint256 y) internal pure returns (uint256 z) {
+        require((z = x + y) >= x);
     }
+
+    function _sub(uint256 x, uint256 y) internal pure returns (uint256 z) {
+        require((z = x - y) <= x);
+    }
+
+    function _mul(uint256 x, uint256 y) internal pure returns (uint256 z) {
+        require(y == 0 || (z = x * y) / y == x);
+    }
+
+    function _save(address usr, uint256 wad) internal {
+        uint256 num = snapshotsNum[usr];
+        if (num > 0 && snapshots[usr][num].fromBlock == block.number) {
+            snapshots[usr][num].rights = wad;
+        } else {
+            snapshotsNum[usr] = num = _add(num, 1);
+            snapshots[usr][num] = Snapshot(block.number, wad);
+        }
+    }
+
+    function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 amount) {
+        uint256 num = snapshotsNum[usr];
+        require(num >= index, "DssChief/not-existing-index");
+        Snapshot memory snapshot = snapshots[usr][index];
+        require(snapshot.fromBlock < blockNum, "DssChief/not-correct-snapshot-1"); // "<" protects for flash loans on voting
+        require(index == num || snapshots[usr][index + 1].fromBlock >= blockNum, "DssChief/not-correct-snapshot-2");
+
+        amount = snapshot.rights;
+    }
+
+
+    // Constructor:
+
+    constructor(address gov_) public {
+        gov = TokenLike(gov_);
+        wards[msg.sender] = 1;
+    }
+
+
+    // External functions:
 
     function rely(address usr) external auth {
         wards[usr] = 1;
@@ -73,24 +129,7 @@ contract DssChief {
         wards[usr] = 0;
     }
 
-    function add(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        require((z = x + y) >= x);
-    }
-
-    function sub(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        require((z = x - y) <= x);
-    }
-
-    function mul(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        require(y == 0 || (z = x * y) / y == x);
-    }
-
-    constructor(address gov_) public {
-        gov = TokenLike(gov_);
-        wards[msg.sender] = 1;
-    }
-
-    function file(bytes32 what, uint256 data) public auth {
+    function file(bytes32 what, uint256 data) external auth {
         if (what == "ttl") ttl = data;
         else if (what == "tic") tic = data; // TODO: Define if we want to place a safe max time
         else if (what == "end") end = data;
@@ -100,16 +139,6 @@ contract DssChief {
             post = data;
         }
         else revert("DssChief/file-unrecognized-param");
-    }
-
-    function _save(address usr, uint256 wad) internal {
-        uint256 num = snapshotsNum[usr];
-        if (num > 0 && snapshots[usr][num].fromBlock == block.number) {
-            snapshots[usr][num].rights = wad;
-        } else {
-            snapshotsNum[usr] = num = add(num, 1);
-            snapshots[usr][num] = Snapshot(block.number, wad);
-        }
     }
 
     function delegate(address usr) external warm {
@@ -129,15 +158,15 @@ contract DssChief {
 
         // If both are active or inactive, do nothing. Otherwise change the totActive MKR
         if (activePrev && !activeUsr) {
-            totActive = sub(totActive, deposit);
+            totActive = _sub(totActive, deposit);
         } else if (!activePrev && activeUsr) {
-            totActive = add(totActive, deposit);
+            totActive = _add(totActive, deposit);
         }
 
         // If already existed a delegated address
         if (prev != address(0)) {
             // Remove sender's deposits from old delegated's voting rights
-            rights[prev] = sub(rights[prev], deposit);
+            rights[prev] = _sub(rights[prev], deposit);
             // If active, save snapshot
             if(activePrev) {
                 _save(prev, rights[prev]);
@@ -147,7 +176,7 @@ contract DssChief {
         // If setting to some delegated address
         if (usr != address(0)) {
             // Add sender's deposits to the new delegated's voting rights
-            rights[usr] = add(rights[usr], deposit);
+            rights[usr] = _add(rights[usr], deposit);
             // If active, save snapshot
             if(activeUsr) {
                 _save(usr, rights[usr]);
@@ -160,17 +189,17 @@ contract DssChief {
         gov.transferFrom(msg.sender, address(this), wad);
 
         // Increase amount deposited from sender
-        deposits[msg.sender] = add(deposits[msg.sender], wad);
+        deposits[msg.sender] = _add(deposits[msg.sender], wad);
 
         // Get actual delegated address
         address delegated = delegation[msg.sender];
 
         // If there is some delegated address
         if (delegated != address(0)) {
-            rights[delegated] = add(rights[delegated], wad);
+            rights[delegated] = _add(rights[delegated], wad);
             if (active[delegated] == 1) {
                 _save(delegated, rights[delegated]);
-                totActive = add(totActive, wad);
+                totActive = _add(totActive, wad);
             }
         }
     }
@@ -180,17 +209,17 @@ contract DssChief {
         require(locked[msg.sender] <= block.timestamp, "DssChief/user-locked");
 
         // Decrease amount deposited from user
-        deposits[msg.sender] = sub(deposits[msg.sender], wad);
+        deposits[msg.sender] = _sub(deposits[msg.sender], wad);
 
         // Get actual delegated address
         address delegated = delegation[msg.sender];
 
         // If there is some delegated address
         if (delegated != address(0)) {
-            rights[delegated] = sub(rights[delegated], wad);
+            rights[delegated] = _sub(rights[delegated], wad);
             if (active[delegated] == 1) {
                 _save(delegated, rights[delegated]);
-                totActive = sub(totActive, wad);
+                totActive = _sub(totActive, wad);
             }
         }
 
@@ -198,19 +227,19 @@ contract DssChief {
         gov.transfer(msg.sender, wad);
     }
 
-
     function clear(address usr) external {
         // If already inactive return
         if (active[usr] == 0) return;
 
         // Check the owner of the MKR and the delegated have not made any recent action
-        require(add(last[usr], ttl) < block.timestamp, "DssChief/not-allowed-to-clear");
+        require(_add(last[usr], ttl) < block.timestamp, "DssChief/not-allowed-to-clear");
 
         // Mark user as inactive
         active[usr] = 0;
 
         // Remove the amount from the total active MKR
-        totActive = sub(totActive, rights[usr]);
+        totActive = _sub(totActive, rights[usr]);
+
         // Save snapshot
         _save(usr, 0);
     }
@@ -225,12 +254,13 @@ contract DssChief {
         uint256 r = rights[msg.sender];
 
         // Add the amount from the total active MKR
-        totActive = add(totActive, r);
+        totActive = _add(totActive, r);
+
         // Save snapshot
         _save(msg.sender, r);
     }
 
-    function launch() external {
+    function launch() external warm {
         // Check system hasn't already been launched
         require(live == 0, "DssChief/already-launched");
 
@@ -253,13 +283,13 @@ contract DssChief {
         require(locked[msg.sender] <= block.timestamp, "DssChief/user-locked");
 
         // Update locked time
-        locked[msg.sender] = add(block.timestamp, tic);
+        locked[msg.sender] = _add(block.timestamp, tic);
 
         // Add new proposal
-        proposalsNum = add(proposalsNum, 1);
+        proposalsNum = _add(proposalsNum, 1);
         proposals[proposalsNum] = Proposal({
                 blockNum: block.number,
-                end: add(block.timestamp, end),
+                end: _add(block.timestamp, end),
                 exec: exec,
                 action: action,
                 totActive: totActive,
@@ -268,16 +298,6 @@ contract DssChief {
         });
 
         return proposalsNum;
-    }
-
-    function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 amount) {
-        uint256 num = snapshotsNum[usr];
-        require(num >= index, "DssChief/not-existing-index");
-        Snapshot memory snapshot = snapshots[usr][index];
-        require(snapshot.fromBlock < blockNum, "DssChief/not-correct-snapshot-1"); // "<" protects for flash loans on voting
-        require(index == num || snapshots[usr][index + 1].fromBlock >= blockNum, "DssChief/not-correct-snapshot-2");
-
-        amount = snapshot.rights;
     }
 
     function vote(uint256 id, uint256 wad, uint256 sIndex) external warm {
@@ -292,7 +312,7 @@ contract DssChief {
         // Update voting rights used by the user
         proposals[id].votes[msg.sender] = wad;
         // Update voting rights to the proposal
-        proposals[id].rights = add(sub(proposals[id].rights, prev), wad);
+        proposals[id].rights = _add(_sub(proposals[id].rights, prev), wad);
     }
 
     function plot(uint256 id) external warm {
@@ -301,7 +321,7 @@ contract DssChief {
         // Verify proposal is not expired
         require(block.timestamp <= proposals[id].end, "DssChief/vote-expired");
         // Verify enough MKR is voting this proposal
-        require(proposals[id].rights > mul(proposals[id].totActive, post) / 100, "DssChief/not-enough-voting-rights");
+        require(proposals[id].rights > _mul(proposals[id].totActive, post) / 100, "DssChief/not-enough-voting-rights");
 
         // Plot action proposal
         proposals[id].status = 1;

@@ -30,7 +30,7 @@ contract DssChief {
     }
 
     // Storage variables
-    mapping (address => uint256)    public wards;
+    mapping(address => uint256)                      public wards;         // Authorized addresses
     uint256                                          public live;          // System liveness
     TokenLike                                        public gov;           // MKR gov token
     uint256                                          public ttl;           // MKR locked expiration time (admin param)

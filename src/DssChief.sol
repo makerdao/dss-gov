@@ -98,7 +98,7 @@ contract DssChief {
         if (num > 0 && snapshots[usr][num].fromBlock == block.number) {
             snapshots[usr][num].rights = wad;
         } else {
-            num = snapshotsNum[usr] = add(snapshotsNum[usr], 1);
+            snapshotsNum[usr] = num = add(num, 1);
             snapshots[usr][num] = Snapshot(block.number, wad);
         }
     }

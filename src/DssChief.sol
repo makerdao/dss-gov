@@ -13,15 +13,6 @@ interface ExecLike {
 }
 
 contract DssChief {
-    // --- Auth ---
-    mapping (address => uint256)    public wards;
-    function rely(address usr)      external auth { wards[usr] = 1; }
-    function deny(address usr)      external auth { wards[usr] = 0; }
-    modifier auth {
-        require(wards[msg.sender] == 1, "DssChief/not-authorized");
-        _;
-    }
-
     struct Proposal {
         uint256 blockNum;
         uint256 end;
@@ -38,6 +29,9 @@ contract DssChief {
         uint256 rights;
     }
 
+    // Storage variables
+    mapping(address => uint256)                      public wards;         // Authorized addresses
+    uint256                                          public live;          // System liveness
     TokenLike                                        public gov;           // MKR gov token
     uint256                                          public ttl;           // MKR locked expiration time (admin param)
     uint256                                          public tic;           // Min time after making a proposal for a second one or freeing MKR (admin param)
@@ -56,12 +50,27 @@ contract DssChief {
     mapping(address => uint256)                      public snapshotsNum;  // User => Amount of snapshots
     mapping(address => mapping(uint256 => Snapshot)) public snapshots;     // User => Index => Snapshot
 
-    uint256                                 constant public MIN_POST = 40; // Min post value that admin can set
-    uint256                                 constant public MAX_POST = 60; // Max post value that admin can set
+    // Constants
+    uint256 constant public SETUP_THRESHOLD = 100000 ether; // Min amount of totalActive MKR to launch the system
+    uint256 constant public MIN_POST        = 40;           // Min post value that admin can set
+    uint256 constant public MAX_POST        = 60;           // Max post value that admin can set
 
     modifier warm {
         _;
         last[msg.sender] = block.timestamp;
+    }
+
+    modifier auth {
+        require(wards[msg.sender] == 1, "DssChief/not-authorized");
+        _;
+    }
+
+    function rely(address usr) external auth {
+        wards[usr] = 1;
+    }
+
+    function deny(address usr) external auth {
+        wards[usr] = 0;
     }
 
     function add(uint256 x, uint256 y) internal pure returns (uint256 z) {
@@ -222,6 +231,13 @@ contract DssChief {
     }
 
     function propose(address exec, address action) external warm returns (uint256) {
+        // Check if system was already launched
+        if (live == 0) {
+            // If not yet, check the totalActive MKR has passed the min Setup Threshold
+            require(totActive >= SETUP_THRESHOLD);
+            // Launch system
+            live = 1;
+        }
         // Check if user has at the least the min amount of MKR for creating a proposal
         uint256 deposit = deposits[msg.sender];
         require(deposit >= min, "DssChief/not-minimum-amount");

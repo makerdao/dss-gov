@@ -38,6 +38,7 @@ contract DssChief {
     mapping(address => uint256)                      public wards;         // Authorized addresses
     uint256                                          public live;          // System liveness
     TokenLike                                        public gov;           // MKR gov token
+    uint256[]                                        public gas;           // Gas storage reserve
     uint256                                          public ttl;           // MKR locked expiration time (admin param)
     uint256                                          public tic;           // Min time after making a proposal for a second one or freeing MKR (admin param)
     uint256                                          public end;           // Duration of a candidate's validity in seconds (admin param)
@@ -106,6 +107,19 @@ contract DssChief {
         } else {
             snapshotsNum[usr] = num = _add(num, 1);
             snapshots[usr][num] = Snapshot(block.number, wad);
+        }
+    }
+
+    function _mint() internal {
+        for (uint256 i = 0; i < 50; i ++) {
+            gas.push(1);
+        }
+    }
+
+    function _burn() internal {
+        uint256 l = gas.length;
+        for (uint256 i = l - 1; i >= l - 50; i --) {
+            delete gas[i];
         }
     }
 
@@ -251,6 +265,9 @@ contract DssChief {
 
         // Save snapshot
         _save(usr, 0);
+
+        // Burn gas storage reserve (refund for caller)
+        _burn();
     }
 
     function ping() external warm {
@@ -267,6 +284,9 @@ contract DssChief {
 
         // Save snapshot
         _save(msg.sender, r);
+
+        // Mint gas storage reserve
+        _mint();
     }
 
     function launch() external warm {

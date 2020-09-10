@@ -58,9 +58,13 @@ contract DssChief {
 
     // Constants:
 
-    uint256 constant public LAUNCH_THRESHOLD = 100000 ether; // Min amount of totalActive MKR to launch the system
-    uint256 constant public MIN_POST         = 40;           // Min post value that admin can set
-    uint256 constant public MAX_POST         = 60;           // Max post value that admin can set
+    uint256 constant public LAUNCH_THRESHOLD    = 100000 ether; // Min amount of totalActive MKR to launch the system
+    uint256 constant public MIN_POST            = 40;           // Min post value that admin can set
+    uint256 constant public MAX_POST            = 60;           // Max post value that admin can set
+    uint256 constant public PROPOSAL_PENDING    = 0;            // New proposal created (being voted)
+    uint256 constant public PROPOSAL_SCHEDULED  = 1;            // Proposal scheduled for being executed
+    uint256 constant public PROPOSAL_EXECUTED   = 2;            // Proposal already executed
+    uint256 constant public PROPOSAL_CANCELLED  = 3;            // Proposal cancelled
 
 
     // Modifiers:
@@ -302,7 +306,7 @@ contract DssChief {
 
     function vote(uint256 id, uint256 wad, uint256 sIndex) external warm {
         // Verify it hasn't been already plotted, not executed nor removed
-        require(proposals[id].status == 0, "DssChief/wrong-status");
+        require(proposals[id].status == PROPOSAL_PENDING, "DssChief/wrong-status");
         // Verify proposal is not expired
         require(proposals[id].end >= block.timestamp, "DssChief/proposal-expired");
         // Verify amount for voting is lower or equal than voting rights
@@ -317,32 +321,32 @@ contract DssChief {
 
     function plot(uint256 id) external warm {
         // Verify it hasn't been already plotted or removed
-        require(proposals[id].status == 0, "DssChief/wrong-status");
+        require(proposals[id].status == PROPOSAL_PENDING, "DssChief/wrong-status");
         // Verify proposal is not expired
         require(block.timestamp <= proposals[id].end, "DssChief/vote-expired");
         // Verify enough MKR is voting this proposal
         require(proposals[id].totVotes > _mul(proposals[id].totActive, post) / 100, "DssChief/not-enough-votes");
 
         // Plot action proposal
-        proposals[id].status = 1;
+        proposals[id].status = PROPOSAL_SCHEDULED;
         ExecLike(proposals[id].exec).plot(proposals[id].action);
     }
 
     function exec(uint256 id) external warm {
         // Verify it has been already plotted, but not executed or removed
-        require(proposals[id].status == 1, "DssChief/wrong-status");
+        require(proposals[id].status == PROPOSAL_SCHEDULED, "DssChief/wrong-status");
 
         // Execute action proposal
-        proposals[id].status = 2;
+        proposals[id].status = PROPOSAL_EXECUTED;
         ExecLike(proposals[id].exec).exec(proposals[id].action);
     }
 
     function drop(uint256 id) external auth {
-        // Verify it hasn't been already removed
-        require(proposals[id].status < 3, "DssChief/wrong-status");
+        // Verify it hasn't been already cancelled
+        require(proposals[id].status < PROPOSAL_CANCELLED, "DssChief/wrong-status");
 
         // Drop action proposal
-        proposals[id].status = 3;
+        proposals[id].status = PROPOSAL_CANCELLED;
         ExecLike(proposals[id].exec).drop(proposals[id].action);
     }
 }

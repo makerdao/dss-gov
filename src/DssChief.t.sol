@@ -1,356 +1,469 @@
 pragma solidity ^0.6.7;
 
 import "ds-test/test.sol";
-import { DSAuth, DSAuthority, DSToken } from "ds-token/token.sol";
+import { DSToken } from "ds-token/token.sol";
 
 import { DssChief } from "./DssChief.sol";
 
+import { ChiefExec } from "./ChiefExec.sol";
+
+import { ChiefMom } from "./ChiefMom.sol";
+
 interface Hevm {
-    function warp(uint) external;
+    function warp(uint256) external;
+    function roll(uint256) external;
 }
 
-// contract ChiefUser {
-//     DssChief chief;
-
-//     constructor(DssChief chief_) public {
-//         chief = chief_;
-//     }
-
-//     function doTransferFrom(DSToken token, address from, address to,
-//                             uint amount)
-//         public
-//         returns (bool)
-//     {
-//         return token.transferFrom(from, to, amount);
-//     }
-
-//     function doTransfer(DSToken token, address to, uint amount)
-//         public
-//         returns (bool)
-//     {
-//         return token.transfer(to, amount);
-//     }
-
-//     function doApprove(DSToken token, address recipient, uint amount)
-//         public
-//         returns (bool)
-//     {
-//         return token.approve(recipient, amount);
-//     }
-
-//     function doAllowance(DSToken token, address owner, address spender)
-//         public view
-//         returns (uint)
-//     {
-//         return token.allowance(owner, spender);
-//     }
-
-//     function doVote(address whom) public {
-//         chief.vote(whom);
-//     }
-
-//     function doUndo(ChiefUser usr, address whom) public {
-//         chief.undo(address(usr), whom);
-//     }
-
-//     function doLock(uint wad) public {
-//         chief.lock(wad);
-//     }
-
-//     function doFree(ChiefUser usr, uint wad) public {
-//         chief.free(address(usr), wad);
-//     }
-// }
-
-// contract CandidateUser {
-//     System sys;
-
-//     constructor(System sys_) public {
-//         sys = sys_;
-//     }
-
-//     function doSysTest() public {
-//         sys.test();
-//     }
-// }
-
-// contract System is DSAuth {
-//     function test() public auth {}
-// }
-
-// contract DssChiefTest is DSTest {
-//     uint256 constant user1InitialBalance = 350 ether;
-//     uint256 constant user2InitialBalance = 250 ether;
-//     uint256 constant user3InitialBalance = 200 ether;
-
-//     Hevm hevm;
-
-//     DssChief chief;
-//     DSToken gov;
-
-//     ChiefUser user1;
-//     ChiefUser user2;
-//     ChiefUser user3;
-
-//     address candidate1;
-//     address candidate2;
-//     address candidate3;
-
-//     System sys; // Mocked System to authed via chief
-
-//     function setUp() public {
-//         // init hevm
-//         hevm = Hevm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
-//         hevm.warp(0);
-
-//         gov = new DSToken("GOV");
-//         gov.mint(1000 ether);
-
-//         chief = new DssChief(address(gov));
-//         chief.file("ttl", 100);
-//         chief.file("end", 200);
-//         chief.file("post", 50);
-
-//         sys = new System();
-//         sys.setAuthority(DSAuthority(address(chief)));
-
-//         user1 = new ChiefUser(chief);
-//         user2 = new ChiefUser(chief);
-//         user3 = new ChiefUser(chief);
-
-//         candidate1 = address(new CandidateUser(sys));
-//         candidate2 = address(new CandidateUser(sys));
-//         candidate3 = address(new CandidateUser(sys));
-
-//         gov.transfer(address(user1), user1InitialBalance);
-//         gov.transfer(address(user2), user2InitialBalance);
-//         gov.transfer(address(user3), user3InitialBalance);
-
-//         user3.doApprove(gov, address(chief), uint(-1));
-//         user2.doApprove(gov, address(chief),  uint(-1));
-//         user1.doApprove(gov, address(chief),  uint(-1));
-//     }
-
-//     function test_lock_debits_user() public {
-//         assertEq(gov.balanceOf(address(user1)), user1InitialBalance);
-
-//         uint lockedAmt = user1InitialBalance / 10;
-//         user1.doApprove(gov, address(chief), lockedAmt);
-//         user1.doLock(lockedAmt);
-
-//         assertEq(gov.balanceOf(address(user1)), user1InitialBalance - lockedAmt);
-//     }
-
-//     function test_free() public {
-//         uint user1LockedAmt = user1InitialBalance / 2;
-//         user1.doApprove(gov, address(chief), user1LockedAmt);
-//         user1.doLock(user1LockedAmt);
-//         assertEq(gov.balanceOf(address(user1)), user1InitialBalance - user1LockedAmt);
-//         hevm.warp(1);
-//         user1.doFree(user1, user1LockedAmt);
-//         assertEq(gov.balanceOf(address(user1)), user1InitialBalance);
-//     }
-
-//     function testFail_free_same_time() public {
-//         uint user1LockedAmt = user1InitialBalance / 2;
-//         user1.doApprove(gov, address(chief), user1LockedAmt);
-//         user1.doLock(user1LockedAmt);
-//         user1.doFree(user1, user1LockedAmt);
-//     }
-
-//     function test_voting_unvoting() public {
-//         uint user1LockedAmt = user1InitialBalance / 2;
-//         user1.doLock(user1LockedAmt);
-
-//         assertEq(chief.count(address(user1)), 0);
-//         assertEq(chief.approvals(candidate1), 0);
-//         assertEq(chief.approvals(candidate2), 0);
-//         assertEq(chief.approvals(candidate3), 0);
-
-//         user1.doVote(candidate1);
-//         assertEq(chief.count(address(user1)), 1);
-//         assertEq(chief.approvals(candidate1), user1LockedAmt);
-//         assertEq(chief.approvals(candidate2), 0);
-//         assertEq(chief.approvals(candidate3), 0);
-
-//         user1.doVote(candidate2);
-//         assertEq(chief.count(address(user1)), 2);
-//         assertEq(chief.approvals(candidate1), user1LockedAmt);
-//         assertEq(chief.approvals(candidate2), user1LockedAmt);
-//         assertEq(chief.approvals(candidate3), 0);
-
-//         user1.doVote(candidate3);
-//         assertEq(chief.count(address(user1)), 3);
-//         assertEq(chief.approvals(candidate1), user1LockedAmt);
-//         assertEq(chief.approvals(candidate2), user1LockedAmt);
-//         assertEq(chief.approvals(candidate3), user1LockedAmt);
-
-//         user1.doUndo(user1, candidate1);
-//         assertEq(chief.count(address(user1)), 2);
-//         assertEq(chief.approvals(candidate1), 0);
-//         assertEq(chief.approvals(candidate2), user1LockedAmt);
-//         assertEq(chief.approvals(candidate3), user1LockedAmt);
-
-//         user1.doUndo(user1, candidate2);
-//         assertEq(chief.count(address(user1)), 1);
-//         assertEq(chief.approvals(candidate1), 0);
-//         assertEq(chief.approvals(candidate2), 0);
-//         assertEq(chief.approvals(candidate3), user1LockedAmt);
-
-//         user1.doUndo(user1, candidate3);
-//         assertEq(chief.count(address(user1)), 0);
-//         assertEq(chief.approvals(candidate1), 0);
-//         assertEq(chief.approvals(candidate2), 0);
-//         assertEq(chief.approvals(candidate3), 0);
-
-//         hevm.warp(1);
-//         user1.doFree(user1, user1LockedAmt);
-//     }
-
-//     function testFail_lock_when_voting() public {
-//         uint user1LockedAmt = user1InitialBalance / 2;
-//         user1.doLock(user1LockedAmt);
-
-//         user1.doVote(candidate1);
-
-//         hevm.warp(1);
-//         user1.doLock(1);
-//     }
-
-//     function testFail_free_when_voting() public {
-//         uint user1LockedAmt = user1InitialBalance / 2;
-//         user1.doLock(user1LockedAmt);
-
-//         user1.doVote(candidate1);
-
-//         hevm.warp(1);
-//         user1.doFree(user1, 1);
-//     }
-
-//     function test_basic_lift_sys_test() public {
-//         user2.doLock(user2InitialBalance);
-
-//         user2.doVote(candidate1);
-//         CandidateUser(candidate1).doSysTest();
-//     }
-
-//     function testFail_sys_test_not_elected() public {
-//         CandidateUser(candidate1).doSysTest();
-//     }
-
-//     function _trySysTest(address usr) internal returns (bool ok) {
-//         (ok,) = address(usr).call(abi.encodeWithSignature("doSysTest()"));
-//     }
-
-//     function test_lift() public {
-//         user3.doLock(user3InitialBalance);
-//         user2.doLock(user2InitialBalance);
-//         user1.doLock(user1InitialBalance);
-
-//         user1.doVote(candidate1);
-//         user2.doVote(candidate2);
-//         user3.doVote(candidate3);
-//         assertEq(chief.approvals(candidate1), 350 ether);
-//         assertEq(chief.approvals(candidate2), 250 ether);
-//         assertEq(chief.approvals(candidate3), 200 ether);
-//         assertTrue(!_trySysTest(candidate1)); // candidate1 ~ 43% => can't execute
-
-//         user3.doUndo(user3, candidate3);
-//         user3.doVote(candidate2);
-//         assertEq(chief.approvals(candidate1), 350 ether);
-//         assertEq(chief.approvals(candidate2), 450 ether);
-//         assertEq(chief.approvals(candidate3), 0);
-//         assertTrue(_trySysTest(candidate2)); // candidate2 ~ 56% => can execute
-
-//         user3.doUndo(user3, candidate2);
-//         hevm.warp(1);
-//         user3.doFree(user3, 100 ether);
-//         user3.doVote(candidate2);
-//         assertEq(chief.approvals(candidate1), 350 ether);
-//         assertEq(chief.approvals(candidate2), 350 ether);
-//         assertEq(chief.approvals(candidate3), 0);
-//         assertTrue(!_trySysTest(candidate2)); // candidate2 = 50% => can't execute
-
-//         user3.doUndo(user3, candidate2);
-//         user3.doLock(1);
-//         user3.doVote(candidate2);
-//         assertEq(chief.approvals(candidate1), 350 ether);
-//         assertEq(chief.approvals(candidate2), 350 ether + 1);
-//         assertEq(chief.approvals(candidate3), 0);
-//         assertTrue(_trySysTest(candidate2)); // candidate2 > 50% => can execute
-
-//         chief.file("post", 51);
-//         assertTrue(!_trySysTest(candidate2)); // candidate2 < 51% => can't execute
-
-//         chief.file("post", 50);
-//         assertTrue(_trySysTest(candidate2)); // candidate2 > 50% => can execute again
-
-//         hevm.warp(200);
-//         assertTrue(_trySysTest(candidate2)); // candidate2 => still can execute
-
-//         hevm.warp(201);
-//         assertTrue(!_trySysTest(candidate2)); // candidate2 => can't execute as it is expired
-//     }
-
-//     function test_undo_other_user() public {
-//         user3.doVote(candidate1);
-//         hevm.warp(chief.ttl() + 1);
-//         user1.doUndo(user3, candidate1);
-//     }
-
-//     function testFail_undo_other_user() public {
-//         user3.doVote(candidate1);
-//         hevm.warp(chief.ttl());
-//         user1.doUndo(user3, candidate1);
-//     }
-
-//     function test_free_other_user() public {
-//         user3.doLock(user3InitialBalance);
-//         hevm.warp(chief.ttl() + 1);
-//         user1.doFree(user3, user3InitialBalance);
-//     }
-
-//     function testFail_free_other_user_not_time_passed() public {
-//         user3.doLock(user3InitialBalance);
-//         hevm.warp(chief.ttl());
-//         user1.doFree(user3, user3InitialBalance);
-//     }
-
-//     function test_first_vote_min() public {
-//         chief.file("min", 50);
-//         user3.doLock(50);
-//         assertEq(chief.deposits(address(user3)), 50);
-//         hevm.warp(1);
-//         user3.doVote(candidate1);
-//         user2.doLock(49);
-//         assertEq(chief.deposits(address(user2)), 49);
-//         user2.doVote(candidate1);
-//     }
-
-//     function testFail_first_vote_not_min() public {
-//         chief.file("min", 50);
-//         user3.doLock(50);
-//         user3.doVote(candidate1);
-//     }
-
-//     function testFail_first_vote_not_time() public {
-//         chief.file("min", 50);
-//         user3.doLock(49);
-//         hevm.warp(1);
-//         user3.doVote(candidate1);
-//     }
-
-//     function test_set_post() public {
-//         for (uint256 i = chief.MIN_POST(); i <= chief.MAX_POST(); i++) {
-//             chief.file("post", i);
-//         }
-//     }
-
-//     function testFail_set_post_under_boundary() public {
-//         chief.file("post", chief.MIN_POST() - 1);
-//     }
-
-//     function testFail_set_post_over_boundary() public {
-//         chief.file("post", chief.MAX_POST() + 1);
-//     }
-// }
+contract ChiefUser {
+    DssChief chief;
+
+    constructor(DssChief chief_) public {
+        chief = chief_;
+    }
+
+    function doTransferFrom(DSToken token, address from, address to,
+                            uint256 amount)
+        public
+        returns (bool)
+    {
+        return token.transferFrom(from, to, amount);
+    }
+
+    function doTransfer(DSToken token, address to, uint256 amount)
+        public
+        returns (bool)
+    {
+        return token.transfer(to, amount);
+    }
+
+    function doApprove(DSToken token, address recipient, uint256 amount)
+        public
+        returns (bool)
+    {
+        return token.approve(recipient, amount);
+    }
+
+    function doAllowance(DSToken token, address owner, address spender)
+        public view
+        returns (uint256)
+    {
+        return token.allowance(owner, spender);
+    }
+
+    function doPing() public {
+        chief.ping();
+    }
+
+    function doLock(uint256 wad) public {
+        chief.lock(wad);
+    }
+
+    function doFree(uint256 wad) public {
+        chief.free(wad);
+    }
+
+    function doDelegate(address usr) public {
+        chief.delegate(usr);
+    }
+
+    function doPropose(address exec, address action) public returns (uint256 id) {
+        id = chief.propose(exec, action);
+    }
+
+    function doVote(uint256 proposal, uint256 wad, uint256 sId) public {
+        chief.vote(proposal, wad, sId);
+    }
+}
+
+contract ActionProposal {
+    System immutable system;
+
+    constructor(address system_) public {
+        system = System(system_);
+    }
+
+    function execute() public {
+        system.testAccess();
+    }
+}
+
+contract ActionDrop {
+    ChiefMom immutable mom;
+    uint256 immutable proposal;
+
+    constructor(address mom_, uint256 proposal_) public {
+        mom = ChiefMom(mom_);
+        proposal = proposal_;
+    }
+
+    function execute() public {
+        mom.drop(proposal);
+    }
+}
+
+contract System {
+    mapping (address => uint256) public wards;
+    function rely(address usr) external auth {wards[usr] = 1; }
+    function deny(address usr) external auth {wards[usr] = 0; }
+    modifier auth {
+        require(wards[msg.sender] == 1, "System/not-authorized");
+        _;
+    }
+    uint256 public executed;
+
+    constructor() public {
+        wards[msg.sender] = 1;
+    }
+
+    function testAccess() public auth {
+        executed = 1;
+    }
+}
+
+contract DssChiefTest is DSTest {
+    uint256 constant user1InitialBalance = 350000 ether;
+    uint256 constant user2InitialBalance = 250000 ether;
+    uint256 constant user3InitialBalance = 200000 ether;
+
+    Hevm hevm;
+
+    DssChief chief;
+    address exec0;
+    address exec12;
+    address mom;
+    DSToken gov;
+
+    ChiefUser user1;
+    ChiefUser user2;
+    ChiefUser user3;
+
+    System system; // Mocked System to authed via chief
+
+    address action1;
+    address action2;
+    address action3;
+
+    uint256 actualBlock;
+
+    function setUp() public {
+        // init hevm
+        hevm = Hevm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
+        hevm.warp(0);
+
+        gov = new DSToken("GOV");
+        gov.mint(1000000 ether);
+
+        // Chief set up
+        chief = new DssChief(address(gov));
+        chief.file("ttl", 100);
+        chief.file("end", 200);
+        chief.file("post", 50);
+
+        exec12 = address(new ChiefExec(address(chief), 12 hours));
+        exec0 = address(new ChiefExec(address(chief), 0));
+        mom = address(new ChiefMom(exec0, address(chief)));
+
+        chief.rely(exec12);
+        chief.rely(mom);
+        //
+
+        system = new System();
+        system.rely(exec12);
+
+        user1 = new ChiefUser(chief);
+        user2 = new ChiefUser(chief);
+        user3 = new ChiefUser(chief);
+
+        action1 = address(new ActionProposal(address(system)));
+        action2 = address(new ActionProposal(address(system)));
+        action3 = address(new ActionProposal(address(system)));
+
+        gov.transfer(address(user1), user1InitialBalance);
+        gov.transfer(address(user2), user2InitialBalance);
+        gov.transfer(address(user3), user3InitialBalance);
+
+        user3.doApprove(gov, address(chief), uint256(-1));
+        user2.doApprove(gov, address(chief),  uint256(-1));
+        user1.doApprove(gov, address(chief),  uint256(-1));
+
+        hevm.warp(1599683711);
+        hevm.roll(actualBlock = 10829728);
+    }
+
+    function _warp(uint256 nBlocks) internal {
+        actualBlock += nBlocks;
+        hevm.roll(actualBlock);
+        hevm.warp(now + nBlocks * 15);
+    }
+
+    function test_lock_debits_user() public {
+        assertEq(gov.balanceOf(address(user1)), user1InitialBalance);
+
+        uint256 lockedAmt = user1InitialBalance / 10;
+        user1.doApprove(gov, address(chief), lockedAmt);
+        user1.doLock(lockedAmt);
+
+        assertEq(gov.balanceOf(address(user1)), user1InitialBalance - lockedAmt);
+    }
+
+    function test_free() public {
+        uint256 user1LockedAmt = user1InitialBalance / 2;
+        user1.doApprove(gov, address(chief), user1LockedAmt);
+        user1.doLock(user1LockedAmt);
+        assertEq(gov.balanceOf(address(user1)), user1InitialBalance - user1LockedAmt);
+        hevm.warp(1);
+        user1.doFree(user1LockedAmt);
+        assertEq(gov.balanceOf(address(user1)), user1InitialBalance);
+    }
+
+    function test_delegate() public {
+        assertEq(chief.delegation(address(user1)), address(0));
+        assertEq(chief.rights(address(user2)), 0);
+        user1.doLock(user1InitialBalance);
+        user1.doDelegate(address(user2));
+        assertEq(chief.delegation(address(user1)), address(user2));
+        assertEq(chief.rights(address(user2)), user1InitialBalance);
+    }
+
+    function test_snapshot() public {
+        uint256 originalBlockNumber = block.number;
+
+        assertEq(chief.snapshotsNum(address(user1)), 0);
+
+        user1.doLock(user1InitialBalance);
+
+        _warp(1);
+        user1.doPing();
+
+        uint256 num = chief.snapshotsNum(address(user1));
+        assertEq(chief.snapshotsNum(address(user1)), num);
+        (uint256 fromBlock, uint256 rights) = chief.snapshots(address(user1), num);
+        assertEq(fromBlock, originalBlockNumber + 1);
+        assertEq(rights, 0);
+
+        _warp(1);
+        user1.doDelegate(address(user1));
+
+        num = chief.snapshotsNum(address(user1));
+        assertEq(chief.snapshotsNum(address(user1)), 2);
+        (fromBlock, rights) = chief.snapshots(address(user1), num);
+        assertEq(fromBlock, originalBlockNumber + 2);
+        assertEq(rights, user1InitialBalance);
+    }
+
+    function test_ping() public {
+        user1.doLock(user1InitialBalance);
+        user1.doDelegate(address(user1));
+        assertEq(chief.active(address(user1)), 0);
+        assertEq(chief.totActive(), 0);
+        user1.doPing();
+        assertEq(chief.active(address(user1)), 1);
+        assertEq(chief.totActive(), user1InitialBalance);
+    }
+
+    function test_clear() public {
+        user1.doLock(user1InitialBalance);
+        user1.doDelegate(address(user1));
+        user1.doPing();
+        assertEq(chief.active(address(user1)), 1);
+        assertEq(chief.totActive(), user1InitialBalance);
+        _warp(chief.ttl() / 15 + 1);
+        chief.clear(address(user1));
+        assertEq(chief.active(address(user1)), 0);
+        assertEq(chief.totActive(), 0);
+    }
+
+    function _tryLaunch() internal returns (bool ok) {
+        (ok,) = address(chief).call(abi.encodeWithSignature("launch()"));
+    }
+
+    function test_launch() public {
+        assertEq(chief.live(), 0);
+        assertTrue(!_tryLaunch());
+        user1.doLock(75000 ether);
+        assertTrue(!_tryLaunch());
+        user2.doLock(25000 ether);
+        assertTrue(!_tryLaunch());
+        user1.doPing();
+        user1.doDelegate(address(user1));
+        assertTrue(!_tryLaunch());
+        user2.doPing();
+        user2.doDelegate(address(user2));
+        assertTrue(_tryLaunch());
+    }
+
+    function _launch() internal {
+        user1.doLock(100000 ether);
+        user1.doPing();
+        user1.doDelegate(address(user1));
+        chief.launch();
+        user1.doFree(100000 ether);
+    }
+
+    function test_propose() public {
+        _launch();
+        user2.doPropose(exec12, action1);
+    }
+
+    function test_voting_unvoting() public {
+        _launch();
+
+        uint user1LockedAmt = user1InitialBalance / 2;
+        user1.doLock(user1LockedAmt);
+
+        _warp(1);
+
+        uint256 proposal1 = user1.doPropose(exec12, action1);
+        uint256 proposal2 = user2.doPropose(exec12, action2);
+        uint256 proposal3 = user3.doPropose(exec12, action3);
+
+        (,,,,, uint256 totVotes1,) = chief.proposals(proposal1);
+        (,,,,, uint256 totVotes2,) = chief.proposals(proposal2);
+        (,,,,, uint256 totVotes3,) = chief.proposals(proposal3);
+        assertEq(totVotes1, 0);
+        assertEq(totVotes2, 0);
+        assertEq(totVotes3, 0);
+
+        // Vote will full rights on proposal 1
+        user1.doVote(proposal1, user1LockedAmt, chief.snapshotsNum(address(user1)));
+        (,,,,, totVotes1,) = chief.proposals(proposal1);
+        (,,,,, totVotes2,) = chief.proposals(proposal2);
+        (,,,,, totVotes3,) = chief.proposals(proposal3);
+        assertEq(totVotes1, user1LockedAmt);
+        assertEq(totVotes2, 0);
+        assertEq(totVotes3, 0);
+
+        // Vote will full rights on proposal 2
+        user1.doVote(proposal2, user1LockedAmt, chief.snapshotsNum(address(user1)));
+        (,,,,, totVotes1,) = chief.proposals(proposal1);
+        (,,,,, totVotes2,) = chief.proposals(proposal2);
+        (,,,,, totVotes3,) = chief.proposals(proposal3);
+        assertEq(totVotes1, user1LockedAmt);
+        assertEq(totVotes2, user1LockedAmt);
+        assertEq(totVotes3, 0);
+
+        // Vote will full rights on proposal 3
+        user1.doVote(proposal3, user1LockedAmt, chief.snapshotsNum(address(user1)));
+        (,,,,, totVotes1,) = chief.proposals(proposal1);
+        (,,,,, totVotes2,) = chief.proposals(proposal2);
+        (,,,,, totVotes3,) = chief.proposals(proposal3);
+        assertEq(totVotes1, user1LockedAmt);
+        assertEq(totVotes2, user1LockedAmt);
+        assertEq(totVotes3, user1LockedAmt);
+
+        // Remove all votes from proposal 1
+        user1.doVote(proposal1, 0, chief.snapshotsNum(address(user1)));
+        (,,,,, totVotes1,) = chief.proposals(proposal1);
+        (,,,,, totVotes2,) = chief.proposals(proposal2);
+        (,,,,, totVotes3,) = chief.proposals(proposal3);
+        assertEq(totVotes1, 0);
+        assertEq(totVotes2, user1LockedAmt);
+        assertEq(totVotes3, user1LockedAmt);
+
+        // Remove all votes from proposal 2
+        user1.doVote(proposal2, 0, chief.snapshotsNum(address(user1)));
+        (,,,,, totVotes1,) = chief.proposals(proposal1);
+        (,,,,, totVotes2,) = chief.proposals(proposal2);
+        (,,,,, totVotes3,) = chief.proposals(proposal3);
+        assertEq(totVotes1, 0);
+        assertEq(totVotes2, 0);
+        assertEq(totVotes3, user1LockedAmt);
+
+        // Remove half of voting rights from proposal 3
+        user1.doVote(proposal3, user1LockedAmt / 2, chief.snapshotsNum(address(user1)));
+        (,,,,, totVotes1,) = chief.proposals(proposal1);
+        (,,,,, totVotes2,) = chief.proposals(proposal2);
+        (,,,,, totVotes3,) = chief.proposals(proposal3);
+        assertEq(totVotes1, 0);
+        assertEq(totVotes2, 0);
+        assertEq(totVotes3, user1LockedAmt / 2);
+    }
+
+    function test_system_execution() public {
+        _launch();
+
+        user1.doLock(user1InitialBalance);
+        _warp(1);
+
+        uint256 proposal = user1.doPropose(exec12, action1);
+        (,,,,,, uint256 status) = chief.proposals(proposal);
+        assertEq(status, chief.PROPOSAL_PENDING());
+
+        user1.doVote(proposal, user1InitialBalance, chief.snapshotsNum(address(user1)));
+
+        chief.plot(proposal);
+        (,,,,,, status) = chief.proposals(proposal);
+        assertEq(status, chief.PROPOSAL_SCHEDULED());
+        assertEq(system.executed(), 0);
+
+        _warp(12 hours / 15 + 1);
+        chief.exec(proposal);
+        (,,,,,, status) = chief.proposals(proposal);
+        assertEq(status, chief.PROPOSAL_EXECUTED());
+    }
+
+    function testFail_system_execution_not_delay() public {
+        _launch();
+
+        user1.doLock(user1InitialBalance);
+        _warp(1);
+
+        uint256 proposal = user1.doPropose(exec12, action1);
+        user1.doVote(proposal, user1InitialBalance, chief.snapshotsNum(address(user1)));
+
+        chief.plot(proposal);
+        chief.exec(proposal);
+    }
+
+    function testFail_system_execution_not_plotted() public {
+        _launch();
+
+        user1.doLock(user1InitialBalance);
+        _warp(1);
+
+        uint256 proposal = user1.doPropose(exec12, action1);
+        user1.doVote(proposal, user1InitialBalance, chief.snapshotsNum(address(user1)));
+
+        chief.exec(proposal);
+    }
+
+    function test_drop() public {
+        _launch();
+
+        user1.doLock(user1InitialBalance);
+        _warp(1);
+
+        uint256 proposal = user1.doPropose(exec12, action1);
+
+        user1.doVote(proposal, user1InitialBalance, chief.snapshotsNum(address(user1)));
+
+        chief.plot(proposal);
+        (,,,,,, uint256 status) = chief.proposals(proposal);
+        assertEq(status, chief.PROPOSAL_SCHEDULED());
+
+        uint256 proposalDrop = user2.doPropose(exec0, address(new ActionDrop(mom, proposal)));
+        _warp(1);
+
+        user1.doVote(proposalDrop, user1InitialBalance, chief.snapshotsNum(address(user1)));
+
+        chief.plot(proposalDrop);
+        chief.exec(proposalDrop);
+
+        (,,,,,, status) = chief.proposals(proposal);
+        assertEq(status, chief.PROPOSAL_CANCELLED());
+    }
+
+    function test_set_post() public {
+        for (uint256 i = chief.MIN_POST(); i <= chief.MAX_POST(); i++) {
+            chief.file("post", i);
+        }
+    }
+
+    function testFail_set_post_under_boundary() public {
+        chief.file("post", chief.MIN_POST() - 1);
+    }
+
+    function testFail_set_post_over_boundary() public {
+        chief.file("post", chief.MAX_POST() + 1);
+    }
+}

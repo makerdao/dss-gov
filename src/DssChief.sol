@@ -22,9 +22,9 @@ contract DssChief {
         address exec;
         address action;
         uint256 totActive;
-        uint256 rights;
-        mapping(address => uint256) votes;
+        uint256 totVotes;
         uint256 status;
+        mapping(address => uint256) votes;
     }
 
     struct Snapshot {
@@ -293,7 +293,7 @@ contract DssChief {
                 exec: exec,
                 action: action,
                 totActive: totActive,
-                rights: 0,
+                totVotes: 0,
                 status: 0
         });
 
@@ -311,8 +311,8 @@ contract DssChief {
         uint256 prev = proposals[id].votes[msg.sender];
         // Update voting rights used by the user
         proposals[id].votes[msg.sender] = wad;
-        // Update voting rights to the proposal
-        proposals[id].rights = _add(_sub(proposals[id].rights, prev), wad);
+        // Update total votes to the proposal
+        proposals[id].totVotes = _add(_sub(proposals[id].totVotes, prev), wad);
     }
 
     function plot(uint256 id) external warm {
@@ -321,7 +321,7 @@ contract DssChief {
         // Verify proposal is not expired
         require(block.timestamp <= proposals[id].end, "DssChief/vote-expired");
         // Verify enough MKR is voting this proposal
-        require(proposals[id].rights > _mul(proposals[id].totActive, post) / 100, "DssChief/not-enough-voting-rights");
+        require(proposals[id].totVotes > _mul(proposals[id].totActive, post) / 100, "DssChief/not-enough-votes");
 
         // Plot action proposal
         proposals[id].status = 1;

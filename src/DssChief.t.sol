@@ -155,8 +155,8 @@ contract DssChiefTest is DSTest {
 
         // Chief set up
         chief = new DssChief(address(gov));
-        chief.file("ttl", 100);
-        chief.file("end", 200);
+        chief.file("ttl", 30 days);
+        chief.file("end", 7 days);
         chief.file("post", 50);
 
         exec12 = address(new ChiefExec(address(chief), 12 hours));

@@ -491,7 +491,7 @@ contract DssChiefTest is DSTest {
         user3.doPing();
         uint256 length = chief.gasLength();
         assertEq(length, 150);
-        _warp(60 days / 15 + 1);
+        _warp(chief.ttl() / 15 + 1);
 
         chief.clear(address(user3));
         length = chief.gasLength();

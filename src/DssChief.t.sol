@@ -466,4 +466,42 @@ contract DssChiefTest is DSTest {
     function testFail_set_post_over_boundary() public {
         chief.file("post", chief.MAX_POST() + 1);
     }
+
+    function test_mint() public {
+        uint256 length = chief.gasLength();
+        assertEq(length, 0);
+        user1.doPing();
+        length = chief.gasLength();
+        assertEq(length, 50);
+        user2.doPing();
+        length = chief.gasLength();
+        assertEq(length, 100);
+        user3.doPing();
+        length = chief.gasLength();
+        assertEq(length, 150);
+
+        for(uint256 i = 0; i < 150; i++) {
+            assertEq(chief.gas(i), 1);
+        }
+    }
+
+    function test_burn() public {
+        user1.doPing();
+        user2.doPing();
+        user3.doPing();
+        uint256 length = chief.gasLength();
+        assertEq(length, 150);
+        _warp(60 days / 15 + 1);
+
+        chief.clear(address(user3));
+        length = chief.gasLength();
+        assertEq(length, 100);
+
+        for(uint256 i = 0; i < 100; i++) {
+            assertEq(chief.gas(i), 1);
+        }
+        // for(uint256 i = 100; i < 150; i++) {
+        //     assertEq(chief.gas(i), 0);
+        // }
+    }
 }

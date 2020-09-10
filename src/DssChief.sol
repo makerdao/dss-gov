@@ -60,6 +60,7 @@ contract DssChief {
     // Auxiliar getters:
 
     function getVotes(uint256 id, address usr) external view returns (uint256) { return proposals[id].votes[usr]; }
+    function gasLength() external view returns(uint256) { return gas.length; }
 
 
     // Constants:
@@ -119,7 +120,8 @@ contract DssChief {
     function _burn() internal {
         uint256 l = gas.length;
         for (uint256 i = l - 1; i >= l - 50; i --) {
-            delete gas[i];
+            delete gas[i]; // TODO: Verify if this is necessary
+            gas.pop();
         }
     }
 

@@ -51,9 +51,14 @@ contract DssChief {
     mapping(address => uint256)                      public last;          // Last time executed
     uint256                                          public proposalsNum;  // Amount of Proposals
     mapping(address => uint256)                      public locked;        // User => Time to be able to free MKR or make a new proposal
-    mapping(uint256 => Proposal)                     public proposals;     // List of proposals
+    mapping(uint256 => Proposal)                     public proposals;     // Proposal Id => Proposal Info
     mapping(address => uint256)                      public snapshotsNum;  // User => Amount of snapshots
     mapping(address => mapping(uint256 => Snapshot)) public snapshots;     // User => Index => Snapshot
+
+
+    // Auxiliar getters:
+
+    function getVotes(uint256 id, address usr) external view returns (uint256) { return proposals[id].votes[usr]; }
 
 
     // Constants:

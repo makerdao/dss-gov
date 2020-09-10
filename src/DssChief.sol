@@ -8,8 +8,8 @@ interface TokenLike {
 interface ExecLike {
     function delay() external view returns (uint256);
     function drop(address) external;
-    function exec(address) external returns (uint256);
-    function plot(address) external returns (uint256);
+    function exec(address) external;
+    function plot(address) external;
 }
 
 contract DssChief {

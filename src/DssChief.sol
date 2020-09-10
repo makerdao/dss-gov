@@ -112,15 +112,15 @@ contract DssChief {
     }
 
     function _mint() internal {
-        for (uint256 i = 0; i < 50; i ++) {
+        for (uint256 i = 0; i < 50; i++) {
             gas.push(1);
         }
     }
 
     function _burn() internal {
         uint256 l = gas.length;
-        for (uint256 i = l - 1; i >= l - 50; i --) {
-            delete gas[i]; // TODO: Verify if this is necessary
+        for (uint256 i = 1; i <= 50; i++) {
+            delete gas[l - i]; // TODO: Verify if this is necessary
             gas.pop();
         }
     }

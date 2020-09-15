@@ -157,7 +157,8 @@ contract DssChiefTest is DSTest {
         chief = new DssChief(address(gov));
         chief.file("ttl", 30 days);
         chief.file("end", 7 days);
-        chief.file("post", 50);
+        chief.file("post", 50); // 50%
+        chief.file("stake", 50); // 50 slots of storage
 
         exec12 = address(new ChiefExec(address(chief), 12 hours));
         exec0 = address(new ChiefExec(address(chief), 0));
@@ -468,17 +469,13 @@ contract DssChiefTest is DSTest {
     }
 
     function test_mint() public {
-        uint256 length = chief.gasLength();
-        assertEq(length, 0);
+        assertEq(chief.gasLength(), 0);
         user1.doPing();
-        length = chief.gasLength();
-        assertEq(length, 50);
+        assertEq(chief.gasLength(), 50);
         user2.doPing();
-        length = chief.gasLength();
-        assertEq(length, 100);
+        assertEq(chief.gasLength(), 100);
         user3.doPing();
-        length = chief.gasLength();
-        assertEq(length, 150);
+        assertEq(chief.gasLength(), 150);
 
         for(uint256 i = 0; i < 150; i++) {
             assertEq(chief.gas(i), 1);
@@ -489,13 +486,11 @@ contract DssChiefTest is DSTest {
         user1.doPing();
         user2.doPing();
         user3.doPing();
-        uint256 length = chief.gasLength();
-        assertEq(length, 150);
+        assertEq(chief.gasLength(), 150);
         _warp(chief.ttl() / 15 + 1);
 
         chief.clear(address(user3));
-        length = chief.gasLength();
-        assertEq(length, 100);
+        assertEq(chief.gasLength(), 100);
 
         for(uint256 i = 0; i < 100; i++) {
             assertEq(chief.gas(i), 1);
@@ -503,5 +498,29 @@ contract DssChiefTest is DSTest {
         // for(uint256 i = 100; i < 150; i++) {
         //     assertEq(chief.gas(i), 0);
         // }
+    }
+
+    function test_mint_burn_different_amounts() public {
+        assertEq(chief.gasLength(), 0);
+        user1.doPing();
+        assertEq(chief.gasLength(), 50);
+        user2.doPing();
+        assertEq(chief.gasLength(), 100);
+
+        chief.file("stake", 30);
+
+        user3.doPing();
+        assertEq(chief.gasLength(), 130);
+
+        _warp(chief.ttl() / 15 + 1);
+
+        chief.clear(address(user2));
+        assertEq(chief.gasLength(), 80);
+
+        chief.clear(address(user3));
+        assertEq(chief.gasLength(), 50);
+
+        chief.clear(address(user1));
+        assertEq(chief.gasLength(), 0);
     }
 }

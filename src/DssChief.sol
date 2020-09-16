@@ -38,11 +38,8 @@ contract DssChief {
     mapping(address => uint256)                      public wards;         // Authorized addresses
     uint256                                          public live;          // System liveness
     TokenLike                                        public gov;           // MKR gov token
-    uint256                                          public ttl;           // MKR locked expiration time (admin param)
-    uint256                                          public tic;           // Min time after making a proposal for a second one or freeing MKR (admin param)
-    uint256                                          public end;           // Duration of a candidate's validity in seconds (admin param)
-    uint256                                          public min;           // Min MKR stake for launching a vote (admin param)
-    uint256                                          public post;          // Min % of total locked MKR to approve a proposal (admin param)
+    uint256[]                                        public gas;           // Gas storage reserve
+    mapping(address => uint256)                      public gasOwners;     // User => Gas staked
     mapping(address => uint256)                      public deposits;      // User => MKR deposited
     mapping(address => address)                      public delegation;    // User => Delegated User
     mapping(address => uint256)                      public rights;        // User => Voting rights
@@ -54,11 +51,20 @@ contract DssChief {
     mapping(uint256 => Proposal)                     public proposals;     // Proposal Id => Proposal Info
     mapping(address => uint256)                      public snapshotsNum;  // User => Amount of snapshots
     mapping(address => mapping(uint256 => Snapshot)) public snapshots;     // User => Index => Snapshot
+    // Admin params
+    uint256                                          public ttl;           // MKR locked expiration time
+    uint256                                          public tic;           // Min time after making a proposal for a second one or freeing MKR
+    uint256                                          public end;           // Duration of a candidate's validity in seconds
+    uint256                                          public min;           // Min MKR stake for launching a vote
+    uint256                                          public post;          // Min % of total locked MKR to approve a proposal
+    uint256                                          public stake;         // Amount of gas to stake when executing ping
+    //
 
 
-    // Auxiliar getters:
+    // Extra getters:
 
     function getVotes(uint256 id, address usr) external view returns (uint256) { return proposals[id].votes[usr]; }
+    function gasLength() external view returns(uint256) { return gas.length; }
 
 
     // Constants:
@@ -109,6 +115,22 @@ contract DssChief {
         }
     }
 
+    function _mint(address usr) internal {
+        for (uint256 i = 0; i < stake; i++) {
+            gas.push(1);
+        }
+        gasOwners[usr] = stake;
+    }
+
+    function _burn(address usr) internal {
+        uint256 l = gas.length;
+        for (uint256 i = 1; i <= gasOwners[usr]; i++) {
+            delete gas[l - i]; // TODO: Verify if this is necessary
+            gas.pop();
+        }
+        gasOwners[usr] = 0;
+    }
+
     function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 amount) {
         uint256 num = snapshotsNum[usr];
         require(num >= index, "DssChief/not-existing-index");
@@ -143,6 +165,7 @@ contract DssChief {
         else if (what == "tic") tic = data; // TODO: Define if we want to place a safe max time
         else if (what == "end") end = data;
         else if (what == "min") min = data;
+        else if (what == "stake") stake = data;
         else if (what == "post") {
             require(data >= MIN_POST && data <= MAX_POST, "DssChief/post-not-safe-range");
             post = data;
@@ -251,6 +274,9 @@ contract DssChief {
 
         // Save snapshot
         _save(usr, 0);
+
+        // Burn gas storage reserve (refund for caller)
+        _burn(usr);
     }
 
     function ping() external warm {
@@ -267,6 +293,9 @@ contract DssChief {
 
         // Save snapshot
         _save(msg.sender, r);
+
+        // Mint gas storage reserve
+        _mint(msg.sender);
     }
 
     function launch() external warm {

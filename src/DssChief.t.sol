@@ -155,10 +155,10 @@ contract DssChiefTest is DSTest {
 
         // Chief set up
         chief = new DssChief(address(gov));
-        chief.file("ttl", 30 days);
-        chief.file("end", 7 days);
-        chief.file("post", 50); // 50%
-        chief.file("stake", 50); // 50 slots of storage
+        chief.file("depositExpiration", 30 days);
+        chief.file("proposalsExpiration", 7 days);
+        chief.file("threshold", 50); // 50%
+        chief.file("gasStakeAmt", 50); // 50 slots of storage
 
         exec12 = address(new ChiefExec(address(chief), 12 hours));
         exec0 = address(new ChiefExec(address(chief), 0));
@@ -218,11 +218,11 @@ contract DssChiefTest is DSTest {
     }
 
     function test_delegate() public {
-        assertEq(chief.delegation(address(user1)), address(0));
+        assertEq(chief.delegates(address(user1)), address(0));
         assertEq(chief.rights(address(user2)), 0);
         user1.doLock(user1InitialBalance);
         user1.doDelegate(address(user2));
-        assertEq(chief.delegation(address(user1)), address(user2));
+        assertEq(chief.delegates(address(user1)), address(user2));
         assertEq(chief.rights(address(user2)), user1InitialBalance);
     }
 
@@ -268,7 +268,7 @@ contract DssChiefTest is DSTest {
         user1.doPing();
         assertEq(chief.active(address(user1)), 1);
         assertEq(chief.totActive(), user1InitialBalance);
-        _warp(chief.ttl() / 15 + 1);
+        _warp(chief.depositExpiration() / 15 + 1);
         chief.clear(address(user1));
         assertEq(chief.active(address(user1)), 0);
         assertEq(chief.totActive(), 0);
@@ -454,31 +454,31 @@ contract DssChiefTest is DSTest {
         assertEq(status, chief.PROPOSAL_CANCELLED());
     }
 
-    function test_set_post() public {
-        for (uint256 i = chief.MIN_POST(); i <= chief.MAX_POST(); i++) {
-            chief.file("post", i);
+    function test_set_threshold() public {
+        for (uint256 i = chief.MIN_THRESHOLD(); i <= chief.MAX_THRESHOLD(); i++) {
+            chief.file("threshold", i);
         }
     }
 
-    function testFail_set_post_under_boundary() public {
-        chief.file("post", chief.MIN_POST() - 1);
+    function testFail_set_threshold_under_boundary() public {
+        chief.file("threshold", chief.MIN_THRESHOLD() - 1);
     }
 
-    function testFail_set_post_over_boundary() public {
-        chief.file("post", chief.MAX_POST() + 1);
+    function testFail_set_threshold_over_boundary() public {
+        chief.file("threshold", chief.MAX_THRESHOLD() + 1);
     }
 
     function test_mint() public {
-        assertEq(chief.gasLength(), 0);
+        assertEq(chief.gasStorageLength(), 0);
         user1.doPing();
-        assertEq(chief.gasLength(), 50);
+        assertEq(chief.gasStorageLength(), 50);
         user2.doPing();
-        assertEq(chief.gasLength(), 100);
+        assertEq(chief.gasStorageLength(), 100);
         user3.doPing();
-        assertEq(chief.gasLength(), 150);
+        assertEq(chief.gasStorageLength(), 150);
 
         for(uint256 i = 0; i < 150; i++) {
-            assertEq(chief.gas(i), 1);
+            assertEq(chief.gasStorage(i), 1);
         }
     }
 
@@ -486,41 +486,41 @@ contract DssChiefTest is DSTest {
         user1.doPing();
         user2.doPing();
         user3.doPing();
-        assertEq(chief.gasLength(), 150);
-        _warp(chief.ttl() / 15 + 1);
+        assertEq(chief.gasStorageLength(), 150);
+        _warp(chief.depositExpiration() / 15 + 1);
 
         chief.clear(address(user3));
-        assertEq(chief.gasLength(), 100);
+        assertEq(chief.gasStorageLength(), 100);
 
         for(uint256 i = 0; i < 100; i++) {
-            assertEq(chief.gas(i), 1);
+            assertEq(chief.gasStorage(i), 1);
         }
         // for(uint256 i = 100; i < 150; i++) {
-        //     assertEq(chief.gas(i), 0);
+        //     assertEq(chief.gasStorage(i), 0);
         // }
     }
 
     function test_mint_burn_different_amounts() public {
-        assertEq(chief.gasLength(), 0);
+        assertEq(chief.gasStorageLength(), 0);
         user1.doPing();
-        assertEq(chief.gasLength(), 50);
+        assertEq(chief.gasStorageLength(), 50);
         user2.doPing();
-        assertEq(chief.gasLength(), 100);
+        assertEq(chief.gasStorageLength(), 100);
 
-        chief.file("stake", 30);
+        chief.file("gasStakeAmt", 30);
 
         user3.doPing();
-        assertEq(chief.gasLength(), 130);
+        assertEq(chief.gasStorageLength(), 130);
 
-        _warp(chief.ttl() / 15 + 1);
+        _warp(chief.depositExpiration() / 15 + 1);
 
         chief.clear(address(user2));
-        assertEq(chief.gasLength(), 80);
+        assertEq(chief.gasStorageLength(), 80);
 
         chief.clear(address(user3));
-        assertEq(chief.gasLength(), 50);
+        assertEq(chief.gasStorageLength(), 50);
 
         chief.clear(address(user1));
-        assertEq(chief.gasLength(), 0);
+        assertEq(chief.gasStorageLength(), 0);
     }
 }

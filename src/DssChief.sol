@@ -35,43 +35,43 @@ contract DssChief {
 
     // Storage variables:
 
-    mapping(address => uint256)                      public wards;         // Authorized addresses
-    uint256                                          public live;          // System liveness
-    TokenLike                                        public gov;           // MKR gov token
-    uint256[]                                        public gas;           // Gas storage reserve
-    mapping(address => uint256)                      public gasOwners;     // User => Gas staked
-    mapping(address => uint256)                      public deposits;      // User => MKR deposited
-    mapping(address => address)                      public delegation;    // User => Delegated User
-    mapping(address => uint256)                      public rights;        // User => Voting rights
-    uint256                                          public totActive;     // Total active MKR
-    mapping(address => uint256)                      public active;        // User => 1 if User is active, otherwise 0
-    mapping(address => uint256)                      public last;          // Last time executed
-    uint256                                          public proposalsNum;  // Amount of Proposals
-    mapping(address => uint256)                      public locked;        // User => Time to be able to free MKR or make a new proposal
-    mapping(uint256 => Proposal)                     public proposals;     // Proposal Id => Proposal Info
-    mapping(address => uint256)                      public snapshotsNum;  // User => Amount of snapshots
-    mapping(address => mapping(uint256 => Snapshot)) public snapshots;     // User => Index => Snapshot
+    mapping(address => uint256)                      public wards;               // Authorized addresses
+    uint256                                          public live;                // System liveness
+    TokenLike                                        public govToken;            // MKR gov token
+    uint256[]                                        public gasStorage;          // Gas storage reserve
+    mapping(address => uint256)                      public gasOwners;           // User => Gas staked
+    mapping(address => uint256)                      public deposits;            // User => MKR deposited
+    mapping(address => address)                      public delegates;           // User => Delegated User
+    mapping(address => uint256)                      public rights;              // User => Voting rights
+    uint256                                          public totActive;           // Total active MKR
+    mapping(address => uint256)                      public active;              // User => 1 if User is active, otherwise 0
+    mapping(address => uint256)                      public lastActivity;        // User => Last activity time
+    mapping(address => uint256)                      public locked;              // User => Time to be able to free MKR or make a new proposal
+    uint256                                          public proposalsNum;        // Amount of Proposals
+    mapping(uint256 => Proposal)                     public proposals;           // Proposal Id => Proposal Info
+    mapping(address => uint256)                      public snapshotsNum;        // User => Amount of snapshots
+    mapping(address => mapping(uint256 => Snapshot)) public snapshots;           // User => Index => Snapshot
     // Admin params
-    uint256                                          public ttl;           // MKR locked expiration time
-    uint256                                          public tic;           // Min time after making a proposal for a second one or freeing MKR
-    uint256                                          public end;           // Duration of a candidate's validity in seconds
-    uint256                                          public min;           // Min MKR stake for launching a vote
-    uint256                                          public post;          // Min % of total locked MKR to approve a proposal
-    uint256                                          public stake;         // Amount of gas to stake when executing ping
+    uint256                                          public depositExpiration;   // MKR locked expiration time
+    uint256                                          public lockedGovTime;       // Min time after making a proposal for a second one or freeing MKR
+    uint256                                          public proposalsExpiration; // Duration of a proposal's validity
+    uint256                                          public minProposalGovAmt;   // Min MKR stake for launching a vote
+    uint256                                          public threshold;           // Min % of total locked MKR to approve a proposal
+    uint256                                          public gasStakeAmt;         // Amount of gas to stake when executing ping
     //
 
 
     // Extra getters:
 
     function getVotes(uint256 id, address usr) external view returns (uint256) { return proposals[id].votes[usr]; }
-    function gasLength() external view returns(uint256) { return gas.length; }
+    function gasStorageLength() external view returns(uint256) { return gasStorage.length; }
 
 
     // Constants:
 
     uint256 constant public LAUNCH_THRESHOLD    = 100000 ether; // Min amount of totalActive MKR to launch the system
-    uint256 constant public MIN_POST            = 40;           // Min post value that admin can set
-    uint256 constant public MAX_POST            = 60;           // Max post value that admin can set
+    uint256 constant public MIN_THRESHOLD       = 40;           // Min threshold value that admin can set
+    uint256 constant public MAX_THRESHOLD       = 60;           // Max threshold value that admin can set
     uint256 constant public PROPOSAL_PENDING    = 0;            // New proposal created (being voted)
     uint256 constant public PROPOSAL_SCHEDULED  = 1;            // Proposal scheduled for being executed
     uint256 constant public PROPOSAL_EXECUTED   = 2;            // Proposal already executed
@@ -87,7 +87,7 @@ contract DssChief {
 
     modifier warm {
         _;
-        last[msg.sender] = block.timestamp;
+        lastActivity[msg.sender] = block.timestamp;
     }
 
 
@@ -116,17 +116,17 @@ contract DssChief {
     }
 
     function _mint(address usr) internal {
-        for (uint256 i = 0; i < stake; i++) {
-            gas.push(1);
+        for (uint256 i = 0; i < gasStakeAmt; i++) {
+            gasStorage.push(1);
         }
-        gasOwners[usr] = stake;
+        gasOwners[usr] = gasStakeAmt;
     }
 
     function _burn(address usr) internal {
-        uint256 l = gas.length;
+        uint256 l = gasStorage.length;
         for (uint256 i = 1; i <= gasOwners[usr]; i++) {
-            delete gas[l - i]; // TODO: Verify if this is necessary
-            gas.pop();
+            delete gasStorage[l - i]; // TODO: Verify if this is necessary
+            gasStorage.pop();
         }
         gasOwners[usr] = 0;
     }
@@ -144,8 +144,8 @@ contract DssChief {
 
     // Constructor:
 
-    constructor(address gov_) public {
-        gov = TokenLike(gov_);
+    constructor(address govToken_) public {
+        govToken = TokenLike(govToken_);
         wards[msg.sender] = 1;
     }
 
@@ -161,26 +161,26 @@ contract DssChief {
     }
 
     function file(bytes32 what, uint256 data) external auth {
-        if (what == "ttl") ttl = data;
-        else if (what == "tic") tic = data; // TODO: Define if we want to place a safe max time
-        else if (what == "end") end = data;
-        else if (what == "min") min = data;
-        else if (what == "stake") stake = data;
-        else if (what == "post") {
-            require(data >= MIN_POST && data <= MAX_POST, "DssChief/post-not-safe-range");
-            post = data;
+        if (what == "depositExpiration") depositExpiration = data;
+        else if (what == "lockedGovTime") lockedGovTime = data; // TODO: Define if we want to place a safe max time
+        else if (what == "proposalsExpiration") proposalsExpiration = data;
+        else if (what == "minProposalGovAmt") minProposalGovAmt = data;
+        else if (what == "gasStakeAmt") gasStakeAmt = data;
+        else if (what == "threshold") {
+            require(data >= MIN_THRESHOLD && data <= MAX_THRESHOLD, "DssChief/threshold-not-safe-range");
+            threshold = data;
         }
         else revert("DssChief/file-unrecognized-param");
     }
 
     function delegate(address usr) external warm {
         // Get actual delegated address
-        address prev = delegation[msg.sender];
+        address prev = delegates[msg.sender];
         // Verify it is not trying to set again the actual address
         require(usr != prev, "DssChief-already-delegated");
 
         // Set new delegated address
-        delegation[msg.sender] = usr;
+        delegates[msg.sender] = usr;
 
         // Get sender deposits
         uint256 deposit = deposits[msg.sender];
@@ -218,13 +218,13 @@ contract DssChief {
 
     function lock(uint256 wad) external warm {
         // Pull MKR from sender's wallet
-        gov.transferFrom(msg.sender, address(this), wad);
+        govToken.transferFrom(msg.sender, address(this), wad);
 
         // Increase amount deposited from sender
         deposits[msg.sender] = _add(deposits[msg.sender], wad);
 
         // Get actual delegated address
-        address delegated = delegation[msg.sender];
+        address delegated = delegates[msg.sender];
 
         // If there is some delegated address
         if (delegated != address(0)) {
@@ -244,7 +244,7 @@ contract DssChief {
         deposits[msg.sender] = _sub(deposits[msg.sender], wad);
 
         // Get actual delegated address
-        address delegated = delegation[msg.sender];
+        address delegated = delegates[msg.sender];
 
         // If there is some delegated address
         if (delegated != address(0)) {
@@ -256,7 +256,7 @@ contract DssChief {
         }
 
         // Push MKR back to user's wallet
-        gov.transfer(msg.sender, wad);
+        govToken.transfer(msg.sender, wad);
     }
 
     function clear(address usr) external {
@@ -264,7 +264,7 @@ contract DssChief {
         if (active[usr] == 0) return;
 
         // Check the owner of the MKR and the delegated have not made any recent action
-        require(_add(last[usr], ttl) < block.timestamp, "DssChief/not-allowed-to-clear");
+        require(_add(lastActivity[usr], depositExpiration) < block.timestamp, "DssChief/not-allowed-to-clear");
 
         // Mark user as inactive
         active[usr] = 0;
@@ -315,19 +315,19 @@ contract DssChief {
 
         // Check user has at least the min amount of MKR for creating a proposal
         uint256 deposit = deposits[msg.sender];
-        require(deposit >= min, "DssChief/not-minimum-amount");
+        require(deposit >= minProposalGovAmt, "DssChief/not-minimum-amount");
 
         // Check user has not made another proposal recently
         require(locked[msg.sender] <= block.timestamp, "DssChief/user-locked");
 
         // Update locked time
-        locked[msg.sender] = _add(block.timestamp, tic);
+        locked[msg.sender] = _add(block.timestamp, lockedGovTime);
 
         // Add new proposal
         proposalsNum = _add(proposalsNum, 1);
         proposals[proposalsNum] = Proposal({
                 blockNum: block.number,
-                end: _add(block.timestamp, end),
+                end: _add(block.timestamp, proposalsExpiration),
                 exec: exec,
                 action: action,
                 totActive: totActive,
@@ -359,7 +359,7 @@ contract DssChief {
         // Verify proposal is not expired
         require(block.timestamp <= proposals[id].end, "DssChief/vote-expired");
         // Verify enough MKR is voting this proposal
-        require(proposals[id].totVotes > _mul(proposals[id].totActive, post) / 100, "DssChief/not-enough-votes");
+        require(proposals[id].totVotes > _mul(proposals[id].totActive, threshold) / 100, "DssChief/not-enough-votes");
 
         // Plot action proposal
         proposals[id].status = PROPOSAL_SCHEDULED;

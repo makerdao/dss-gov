@@ -1,6 +1,6 @@
 pragma solidity ^0.6.7;
 
-contract ChiefExec {
+contract GovExec {
     // As they are immutable can not be changed in the delegatecall
     address immutable public owner;
     uint256 immutable public tic;
@@ -8,7 +8,7 @@ contract ChiefExec {
     mapping (address => uint256) public time;
 
     modifier onlyOwner {
-        require(msg.sender == owner, "ChiefExec/only-owner");
+        require(msg.sender == owner, "GovExec/only-owner");
         _;
     }
 
@@ -23,7 +23,7 @@ contract ChiefExec {
 
     function plot(address action) external onlyOwner {
         if (tic > 0) {
-            require(time[action] == 0, "ChiefExec/action-already-plotted");
+            require(time[action] == 0, "GovExec/action-already-plotted");
             time[action] = add(block.timestamp, tic);
         }
     }
@@ -37,14 +37,14 @@ contract ChiefExec {
     function exec(address action) external onlyOwner {
         if (tic > 0) {
             uint256 t = time[action];
-            require(t != 0,   "ChiefExec/not-plotted");
-            require(now >= t, "ChiefExec/not-delay-passed");
+            require(t != 0,   "GovExec/not-plotted");
+            require(now >= t, "GovExec/not-delay-passed");
 
             time[action] = 0;
         }
 
         bool ok;
         (ok, ) = action.delegatecall(abi.encodeWithSignature("execute()"));
-        require(ok, "ChiefExec/delegatecall-error");
+        require(ok, "GovExec/delegatecall-error");
     }
 }

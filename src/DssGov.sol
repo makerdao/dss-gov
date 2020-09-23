@@ -12,7 +12,7 @@ interface ExecLike {
     function plot(address) external;
 }
 
-contract DssChief {
+contract DssGov {
 
     // Structs:
 
@@ -81,7 +81,7 @@ contract DssChief {
     // Modifiers:
 
     modifier auth {
-        require(wards[msg.sender] == 1, "DssChief/not-authorized");
+        require(wards[msg.sender] == 1, "DssGov/not-authorized");
         _;
     }
 
@@ -133,10 +133,10 @@ contract DssChief {
 
     function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 amount) {
         uint256 num = numSnapshots[usr];
-        require(num >= index, "DssChief/not-existing-index");
+        require(num >= index, "DssGov/not-existing-index");
         Snapshot memory snapshot = snapshots[usr][index];
-        require(snapshot.fromBlock < blockNum, "DssChief/not-correct-snapshot-1"); // "<" protects for flash loans on voting
-        require(index == num || snapshots[usr][index + 1].fromBlock >= blockNum, "DssChief/not-correct-snapshot-2");
+        require(snapshot.fromBlock < blockNum, "DssGov/not-correct-snapshot-1"); // "<" protects for flash loans on voting
+        require(index == num || snapshots[usr][index + 1].fromBlock >= blockNum, "DssGov/not-correct-snapshot-2");
 
         amount = snapshot.rights;
     }
@@ -167,17 +167,17 @@ contract DssChief {
         else if (what == "minGovStake") minGovStake = data;
         else if (what == "gasStakeAmt") gasStakeAmt = data;
         else if (what == "threshold") {
-            require(data >= MIN_THRESHOLD && data <= MAX_THRESHOLD, "DssChief/threshold-not-safe-range");
+            require(data >= MIN_THRESHOLD && data <= MAX_THRESHOLD, "DssGov/threshold-not-safe-range");
             threshold = data;
         }
-        else revert("DssChief/file-unrecognized-param");
+        else revert("DssGov/file-unrecognized-param");
     }
 
     function delegate(address usr) external warm {
         // Get actual delegated address
         address prev = delegates[msg.sender];
         // Verify it is not trying to set again the actual address
-        require(usr != prev, "DssChief-already-delegated");
+        require(usr != prev, "DssGov-already-delegated");
 
         // Set new delegated address
         delegates[msg.sender] = usr;
@@ -238,7 +238,7 @@ contract DssChief {
 
     function free(uint256 wad) external warm {
         // Check if user has not made recently a proposal
-        require(unlockTime[msg.sender] <= block.timestamp, "DssChief/user-locked");
+        require(unlockTime[msg.sender] <= block.timestamp, "DssGov/user-locked");
 
         // Decrease amount deposited from user
         deposits[msg.sender] = _sub(deposits[msg.sender], wad);
@@ -264,7 +264,7 @@ contract DssChief {
         if (active[usr] == 0) return;
 
         // Check the owner of the MKR and the delegated have not made any recent action
-        require(_add(lastActivity[usr], depositLifetime) < block.timestamp, "DssChief/not-allowed-to-clear");
+        require(_add(lastActivity[usr], depositLifetime) < block.timestamp, "DssGov/not-allowed-to-clear");
 
         // Mark user as inactive
         active[usr] = 0;
@@ -300,10 +300,10 @@ contract DssChief {
 
     function launch() external warm {
         // Check system hasn't already been launched
-        require(live == 0, "DssChief/already-launched");
+        require(live == 0, "DssGov/already-launched");
 
         // Check totalActive MKR has passed the min Setup Threshold
-        require(totActive >= LAUNCH_THRESHOLD, "DssChief/not-minimum");
+        require(totActive >= LAUNCH_THRESHOLD, "DssGov/not-minimum");
 
         // Launch system
         live = 1;
@@ -311,14 +311,14 @@ contract DssChief {
 
     function propose(address exec, address action) external warm returns (uint256) {
         // Check system is live
-        require(live == 1, "DssChief/not-launched");
+        require(live == 1, "DssGov/not-launched");
 
         // Check user has at least the min amount of MKR for creating a proposal
         uint256 deposit = deposits[msg.sender];
-        require(deposit >= minGovStake, "DssChief/not-minimum-amount");
+        require(deposit >= minGovStake, "DssGov/not-minimum-amount");
 
         // Check user has not made another proposal recently
-        require(unlockTime[msg.sender] <= block.timestamp, "DssChief/user-locked");
+        require(unlockTime[msg.sender] <= block.timestamp, "DssGov/user-locked");
 
         // Update locked time
         unlockTime[msg.sender] = _add(block.timestamp, lockDuration);
@@ -340,11 +340,11 @@ contract DssChief {
 
     function vote(uint256 id, uint256 wad, uint256 sIndex) external warm {
         // Verify it hasn't been already plotted, not executed nor removed
-        require(proposals[id].status == PROPOSAL_PENDING, "DssChief/wrong-status");
+        require(proposals[id].status == PROPOSAL_PENDING, "DssGov/wrong-status");
         // Verify proposal is not expired
-        require(proposals[id].end >= block.timestamp, "DssChief/proposal-expired");
+        require(proposals[id].end >= block.timestamp, "DssGov/proposal-expired");
         // Verify amount for voting is lower or equal than voting rights
-        require(wad <= _getUserRights(msg.sender, sIndex, proposals[id].blockNum), "DssChief/amount-exceeds-rights");
+        require(wad <= _getUserRights(msg.sender, sIndex, proposals[id].blockNum), "DssGov/amount-exceeds-rights");
 
         uint256 prev = proposals[id].votes[msg.sender];
         // Update voting rights used by the user
@@ -355,11 +355,11 @@ contract DssChief {
 
     function plot(uint256 id) external warm {
         // Verify it hasn't been already plotted or removed
-        require(proposals[id].status == PROPOSAL_PENDING, "DssChief/wrong-status");
+        require(proposals[id].status == PROPOSAL_PENDING, "DssGov/wrong-status");
         // Verify proposal is not expired
-        require(block.timestamp <= proposals[id].end, "DssChief/vote-expired");
+        require(block.timestamp <= proposals[id].end, "DssGov/vote-expired");
         // Verify enough MKR is voting this proposal
-        require(proposals[id].totVotes > _mul(proposals[id].totActive, threshold) / 100, "DssChief/not-enough-votes");
+        require(proposals[id].totVotes > _mul(proposals[id].totActive, threshold) / 100, "DssGov/not-enough-votes");
 
         // Plot action proposal
         proposals[id].status = PROPOSAL_SCHEDULED;
@@ -368,7 +368,7 @@ contract DssChief {
 
     function exec(uint256 id) external warm {
         // Verify it has been already plotted, but not executed or removed
-        require(proposals[id].status == PROPOSAL_SCHEDULED, "DssChief/wrong-status");
+        require(proposals[id].status == PROPOSAL_SCHEDULED, "DssGov/wrong-status");
 
         // Execute action proposal
         proposals[id].status = PROPOSAL_EXECUTED;
@@ -377,7 +377,7 @@ contract DssChief {
 
     function drop(uint256 id) external auth {
         // Verify it hasn't been already cancelled
-        require(proposals[id].status < PROPOSAL_CANCELLED, "DssChief/wrong-status");
+        require(proposals[id].status < PROPOSAL_CANCELLED, "DssGov/wrong-status");
 
         // Drop action proposal
         proposals[id].status = PROPOSAL_CANCELLED;

@@ -155,8 +155,8 @@ contract DssChiefTest is DSTest {
 
         // Chief set up
         chief = new DssChief(address(gov));
-        chief.file("depositExpiration", 30 days);
-        chief.file("proposalsExpiration", 7 days);
+        chief.file("depositLifetime", 30 days);
+        chief.file("proposalLifetime", 7 days);
         chief.file("threshold", 50); // 50%
         chief.file("gasStakeAmt", 50); // 50 slots of storage
 
@@ -229,15 +229,15 @@ contract DssChiefTest is DSTest {
     function test_snapshot() public {
         uint256 originalBlockNumber = block.number;
 
-        assertEq(chief.snapshotsNum(address(user1)), 0);
+        assertEq(chief.numSnapshots(address(user1)), 0);
 
         user1.doLock(user1InitialBalance);
 
         _warp(1);
         user1.doPing();
 
-        uint256 num = chief.snapshotsNum(address(user1));
-        assertEq(chief.snapshotsNum(address(user1)), num);
+        uint256 num = chief.numSnapshots(address(user1));
+        assertEq(chief.numSnapshots(address(user1)), num);
         (uint256 fromBlock, uint256 rights) = chief.snapshots(address(user1), num);
         assertEq(fromBlock, originalBlockNumber + 1);
         assertEq(rights, 0);
@@ -245,8 +245,8 @@ contract DssChiefTest is DSTest {
         _warp(1);
         user1.doDelegate(address(user1));
 
-        num = chief.snapshotsNum(address(user1));
-        assertEq(chief.snapshotsNum(address(user1)), 2);
+        num = chief.numSnapshots(address(user1));
+        assertEq(chief.numSnapshots(address(user1)), 2);
         (fromBlock, rights) = chief.snapshots(address(user1), num);
         assertEq(fromBlock, originalBlockNumber + 2);
         assertEq(rights, user1InitialBalance);
@@ -268,7 +268,7 @@ contract DssChiefTest is DSTest {
         user1.doPing();
         assertEq(chief.active(address(user1)), 1);
         assertEq(chief.totActive(), user1InitialBalance);
-        _warp(chief.depositExpiration() / 15 + 1);
+        _warp(chief.depositLifetime() / 15 + 1);
         chief.clear(address(user1));
         assertEq(chief.active(address(user1)), 0);
         assertEq(chief.totActive(), 0);
@@ -326,7 +326,7 @@ contract DssChiefTest is DSTest {
         assertEq(totVotes3, 0);
 
         // Vote will full rights on proposal 1
-        user1.doVote(proposal1, user1LockedAmt, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposal1, user1LockedAmt, chief.numSnapshots(address(user1)));
         (,,,,, totVotes1,) = chief.proposals(proposal1);
         (,,,,, totVotes2,) = chief.proposals(proposal2);
         (,,,,, totVotes3,) = chief.proposals(proposal3);
@@ -335,7 +335,7 @@ contract DssChiefTest is DSTest {
         assertEq(totVotes3, 0);
 
         // Vote will full rights on proposal 2
-        user1.doVote(proposal2, user1LockedAmt, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposal2, user1LockedAmt, chief.numSnapshots(address(user1)));
         (,,,,, totVotes1,) = chief.proposals(proposal1);
         (,,,,, totVotes2,) = chief.proposals(proposal2);
         (,,,,, totVotes3,) = chief.proposals(proposal3);
@@ -344,7 +344,7 @@ contract DssChiefTest is DSTest {
         assertEq(totVotes3, 0);
 
         // Vote will full rights on proposal 3
-        user1.doVote(proposal3, user1LockedAmt, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposal3, user1LockedAmt, chief.numSnapshots(address(user1)));
         (,,,,, totVotes1,) = chief.proposals(proposal1);
         (,,,,, totVotes2,) = chief.proposals(proposal2);
         (,,,,, totVotes3,) = chief.proposals(proposal3);
@@ -353,7 +353,7 @@ contract DssChiefTest is DSTest {
         assertEq(totVotes3, user1LockedAmt);
 
         // Remove all votes from proposal 1
-        user1.doVote(proposal1, 0, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposal1, 0, chief.numSnapshots(address(user1)));
         (,,,,, totVotes1,) = chief.proposals(proposal1);
         (,,,,, totVotes2,) = chief.proposals(proposal2);
         (,,,,, totVotes3,) = chief.proposals(proposal3);
@@ -362,7 +362,7 @@ contract DssChiefTest is DSTest {
         assertEq(totVotes3, user1LockedAmt);
 
         // Remove all votes from proposal 2
-        user1.doVote(proposal2, 0, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposal2, 0, chief.numSnapshots(address(user1)));
         (,,,,, totVotes1,) = chief.proposals(proposal1);
         (,,,,, totVotes2,) = chief.proposals(proposal2);
         (,,,,, totVotes3,) = chief.proposals(proposal3);
@@ -371,7 +371,7 @@ contract DssChiefTest is DSTest {
         assertEq(totVotes3, user1LockedAmt);
 
         // Remove half of voting rights from proposal 3
-        user1.doVote(proposal3, user1LockedAmt / 2, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposal3, user1LockedAmt / 2, chief.numSnapshots(address(user1)));
         (,,,,, totVotes1,) = chief.proposals(proposal1);
         (,,,,, totVotes2,) = chief.proposals(proposal2);
         (,,,,, totVotes3,) = chief.proposals(proposal3);
@@ -390,7 +390,7 @@ contract DssChiefTest is DSTest {
         (,,,,,, uint256 status) = chief.proposals(proposal);
         assertEq(status, chief.PROPOSAL_PENDING());
 
-        user1.doVote(proposal, user1InitialBalance, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposal, user1InitialBalance, chief.numSnapshots(address(user1)));
 
         chief.plot(proposal);
         (,,,,,, status) = chief.proposals(proposal);
@@ -410,7 +410,7 @@ contract DssChiefTest is DSTest {
         _warp(1);
 
         uint256 proposal = user1.doPropose(exec12, action1);
-        user1.doVote(proposal, user1InitialBalance, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposal, user1InitialBalance, chief.numSnapshots(address(user1)));
 
         chief.plot(proposal);
         chief.exec(proposal);
@@ -423,7 +423,7 @@ contract DssChiefTest is DSTest {
         _warp(1);
 
         uint256 proposal = user1.doPropose(exec12, action1);
-        user1.doVote(proposal, user1InitialBalance, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposal, user1InitialBalance, chief.numSnapshots(address(user1)));
 
         chief.exec(proposal);
     }
@@ -436,7 +436,7 @@ contract DssChiefTest is DSTest {
 
         uint256 proposal = user1.doPropose(exec12, action1);
 
-        user1.doVote(proposal, user1InitialBalance, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposal, user1InitialBalance, chief.numSnapshots(address(user1)));
 
         chief.plot(proposal);
         (,,,,,, uint256 status) = chief.proposals(proposal);
@@ -445,7 +445,7 @@ contract DssChiefTest is DSTest {
         uint256 proposalDrop = user2.doPropose(exec0, address(new ActionDrop(mom, proposal)));
         _warp(1);
 
-        user1.doVote(proposalDrop, user1InitialBalance, chief.snapshotsNum(address(user1)));
+        user1.doVote(proposalDrop, user1InitialBalance, chief.numSnapshots(address(user1)));
 
         chief.plot(proposalDrop);
         chief.exec(proposalDrop);
@@ -487,7 +487,7 @@ contract DssChiefTest is DSTest {
         user2.doPing();
         user3.doPing();
         assertEq(chief.gasStorageLength(), 150);
-        _warp(chief.depositExpiration() / 15 + 1);
+        _warp(chief.depositLifetime() / 15 + 1);
 
         chief.clear(address(user3));
         assertEq(chief.gasStorageLength(), 100);
@@ -512,7 +512,7 @@ contract DssChiefTest is DSTest {
         user3.doPing();
         assertEq(chief.gasStorageLength(), 130);
 
-        _warp(chief.depositExpiration() / 15 + 1);
+        _warp(chief.depositLifetime() / 15 + 1);
 
         chief.clear(address(user2));
         assertEq(chief.gasStorageLength(), 80);

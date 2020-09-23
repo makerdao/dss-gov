@@ -46,16 +46,16 @@ contract DssChief {
     uint256                                          public totActive;           // Total active MKR
     mapping(address => uint256)                      public active;              // User => 1 if User is active, otherwise 0
     mapping(address => uint256)                      public lastActivity;        // User => Last activity time
-    mapping(address => uint256)                      public locked;              // User => Time to be able to free MKR or make a new proposal
-    uint256                                          public proposalsNum;        // Amount of Proposals
+    mapping(address => uint256)                      public unlockTime;          // User => Time to be able to free MKR or make a new proposal
+    uint256                                          public numProposals;        // Amount of Proposals
     mapping(uint256 => Proposal)                     public proposals;           // Proposal Id => Proposal Info
-    mapping(address => uint256)                      public snapshotsNum;        // User => Amount of snapshots
+    mapping(address => uint256)                      public numSnapshots;        // User => Amount of snapshots
     mapping(address => mapping(uint256 => Snapshot)) public snapshots;           // User => Index => Snapshot
     // Admin params
-    uint256                                          public depositExpiration;   // MKR locked expiration time
-    uint256                                          public lockedGovTime;       // Min time after making a proposal for a second one or freeing MKR
-    uint256                                          public proposalsExpiration; // Duration of a proposal's validity
-    uint256                                          public minProposalGovAmt;   // Min MKR stake for launching a vote
+    uint256                                          public depositLifetime;     // MKR locked expiration time
+    uint256                                          public lockDuration;        // Min time after making a proposal for a second one or freeing MKR
+    uint256                                          public proposalLifetime;    // Duration of a proposal's validity
+    uint256                                          public minGovStake;         // Min MKR stake for launching a vote
     uint256                                          public threshold;           // Min % of total locked MKR to approve a proposal
     uint256                                          public gasStakeAmt;         // Amount of gas to stake when executing ping
     //
@@ -106,11 +106,11 @@ contract DssChief {
     }
 
     function _save(address usr, uint256 wad) internal {
-        uint256 num = snapshotsNum[usr];
+        uint256 num = numSnapshots[usr];
         if (num > 0 && snapshots[usr][num].fromBlock == block.number) {
             snapshots[usr][num].rights = wad;
         } else {
-            snapshotsNum[usr] = num = _add(num, 1);
+            numSnapshots[usr] = num = _add(num, 1);
             snapshots[usr][num] = Snapshot(block.number, wad);
         }
     }
@@ -132,7 +132,7 @@ contract DssChief {
     }
 
     function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 amount) {
-        uint256 num = snapshotsNum[usr];
+        uint256 num = numSnapshots[usr];
         require(num >= index, "DssChief/not-existing-index");
         Snapshot memory snapshot = snapshots[usr][index];
         require(snapshot.fromBlock < blockNum, "DssChief/not-correct-snapshot-1"); // "<" protects for flash loans on voting
@@ -161,10 +161,10 @@ contract DssChief {
     }
 
     function file(bytes32 what, uint256 data) external auth {
-        if (what == "depositExpiration") depositExpiration = data;
-        else if (what == "lockedGovTime") lockedGovTime = data; // TODO: Define if we want to place a safe max time
-        else if (what == "proposalsExpiration") proposalsExpiration = data;
-        else if (what == "minProposalGovAmt") minProposalGovAmt = data;
+        if (what == "depositLifetime") depositLifetime = data;
+        else if (what == "lockDuration") lockDuration = data; // TODO: Define if we want to place a safe max time
+        else if (what == "proposalLifetime") proposalLifetime = data;
+        else if (what == "minGovStake") minGovStake = data;
         else if (what == "gasStakeAmt") gasStakeAmt = data;
         else if (what == "threshold") {
             require(data >= MIN_THRESHOLD && data <= MAX_THRESHOLD, "DssChief/threshold-not-safe-range");
@@ -238,7 +238,7 @@ contract DssChief {
 
     function free(uint256 wad) external warm {
         // Check if user has not made recently a proposal
-        require(locked[msg.sender] <= block.timestamp, "DssChief/user-locked");
+        require(unlockTime[msg.sender] <= block.timestamp, "DssChief/user-locked");
 
         // Decrease amount deposited from user
         deposits[msg.sender] = _sub(deposits[msg.sender], wad);
@@ -264,7 +264,7 @@ contract DssChief {
         if (active[usr] == 0) return;
 
         // Check the owner of the MKR and the delegated have not made any recent action
-        require(_add(lastActivity[usr], depositExpiration) < block.timestamp, "DssChief/not-allowed-to-clear");
+        require(_add(lastActivity[usr], depositLifetime) < block.timestamp, "DssChief/not-allowed-to-clear");
 
         // Mark user as inactive
         active[usr] = 0;
@@ -315,19 +315,19 @@ contract DssChief {
 
         // Check user has at least the min amount of MKR for creating a proposal
         uint256 deposit = deposits[msg.sender];
-        require(deposit >= minProposalGovAmt, "DssChief/not-minimum-amount");
+        require(deposit >= minGovStake, "DssChief/not-minimum-amount");
 
         // Check user has not made another proposal recently
-        require(locked[msg.sender] <= block.timestamp, "DssChief/user-locked");
+        require(unlockTime[msg.sender] <= block.timestamp, "DssChief/user-locked");
 
         // Update locked time
-        locked[msg.sender] = _add(block.timestamp, lockedGovTime);
+        unlockTime[msg.sender] = _add(block.timestamp, lockDuration);
 
         // Add new proposal
-        proposalsNum = _add(proposalsNum, 1);
-        proposals[proposalsNum] = Proposal({
+        numProposals = _add(numProposals, 1);
+        proposals[numProposals] = Proposal({
                 blockNum: block.number,
-                end: _add(block.timestamp, proposalsExpiration),
+                end: _add(block.timestamp, proposalLifetime),
                 exec: exec,
                 action: action,
                 totActive: totActive,
@@ -335,7 +335,7 @@ contract DssChief {
                 status: 0
         });
 
-        return proposalsNum;
+        return numProposals;
     }
 
     function vote(uint256 id, uint256 wad, uint256 sIndex) external warm {

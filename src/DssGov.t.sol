@@ -155,7 +155,7 @@ contract DssGovTest is DSTest {
 
         // Gov set up
         gov = new DssGov(address(govToken));
-        gov.file("depositLifetime", 30 days);
+        gov.file("rightsLifetime", 30 days);
         gov.file("proposalLifetime", 7 days);
         gov.file("threshold", 50); // 50%
         gov.file("gasStakeAmt", 50); // 50 slots of storage
@@ -268,7 +268,7 @@ contract DssGovTest is DSTest {
         user1.doPing();
         assertEq(gov.active(address(user1)), 1);
         assertEq(gov.totActive(), user1InitialBalance);
-        _warp(gov.depositLifetime() / 15 + 1);
+        _warp(gov.rightsLifetime() / 15 + 1);
         gov.clear(address(user1));
         assertEq(gov.active(address(user1)), 0);
         assertEq(gov.totActive(), 0);
@@ -487,7 +487,7 @@ contract DssGovTest is DSTest {
         user2.doPing();
         user3.doPing();
         assertEq(gov.gasStorageLength(), 150);
-        _warp(gov.depositLifetime() / 15 + 1);
+        _warp(gov.rightsLifetime() / 15 + 1);
 
         gov.clear(address(user3));
         assertEq(gov.gasStorageLength(), 100);
@@ -512,7 +512,7 @@ contract DssGovTest is DSTest {
         user3.doPing();
         assertEq(gov.gasStorageLength(), 130);
 
-        _warp(gov.depositLifetime() / 15 + 1);
+        _warp(gov.rightsLifetime() / 15 + 1);
 
         gov.clear(address(user2));
         assertEq(gov.gasStorageLength(), 80);

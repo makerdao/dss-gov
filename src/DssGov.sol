@@ -52,7 +52,7 @@ contract DssGov {
     mapping(address => uint256)                      public numSnapshots;        // User => Amount of snapshots
     mapping(address => mapping(uint256 => Snapshot)) public snapshots;           // User => Index => Snapshot
     // Admin params
-    uint256                                          public depositLifetime;     // MKR locked expiration time
+    uint256                                          public rightsLifetime;      // Delegated rights lifetime without activity of the delegated
     uint256                                          public lockDuration;        // Min time after making a proposal for a second one or freeing MKR
     uint256                                          public proposalLifetime;    // Duration of a proposal's validity
     uint256                                          public minGovStake;         // Min MKR stake for launching a vote
@@ -161,7 +161,7 @@ contract DssGov {
     }
 
     function file(bytes32 what, uint256 data) external auth {
-        if (what == "depositLifetime") depositLifetime = data;
+        if (what == "rightsLifetime") rightsLifetime = data;
         else if (what == "lockDuration") lockDuration = data; // TODO: Define if we want to place a safe max time
         else if (what == "proposalLifetime") proposalLifetime = data;
         else if (what == "minGovStake") minGovStake = data;
@@ -264,7 +264,7 @@ contract DssGov {
         if (active[usr] == 0) return;
 
         // Check the owner of the MKR and the delegated have not made any recent action
-        require(_add(lastActivity[usr], depositLifetime) < block.timestamp, "DssGov/not-allowed-to-clear");
+        require(_add(lastActivity[usr], rightsLifetime) < block.timestamp, "DssGov/not-allowed-to-clear");
 
         // Mark user as inactive
         active[usr] = 0;

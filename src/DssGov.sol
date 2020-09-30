@@ -32,6 +32,11 @@ contract DssGov {
         uint256 rights;
     }
 
+    struct DeployerDay {
+        uint256 lastDay;
+        uint256 count;
+    }
+
 
     // Storage variables:
 
@@ -47,6 +52,8 @@ contract DssGov {
     mapping(address => uint256)                      public active;              // User => 1 if User is active, otherwise 0
     mapping(address => uint256)                      public lastActivity;        // User => Last activity time
     mapping(address => uint256)                      public unlockTime;          // User => Time to be able to free MKR or make a new proposal
+    mapping(address => uint256)                      public deployers;           // Deployer user => Allowed to propose without MKR deposit
+    mapping(address => DeployerDay)                  public deployersPropDay;    // Deployer user => Deployer day (last day, amount)
     uint256                                          public numProposals;        // Amount of Proposals
     mapping(uint256 => Proposal)                     public proposals;           // Proposal Id => Proposal Info
     mapping(address => uint256)                      public numSnapshots;        // User => Amount of snapshots
@@ -58,6 +65,7 @@ contract DssGov {
     uint256                                          public minGovStake;         // Min MKR stake for launching a vote
     uint256                                          public threshold;           // Min % of total locked MKR to approve a proposal
     uint256                                          public gasStakeAmt;         // Amount of gas to stake when executing ping
+    uint256                                          public maxPropDeployer;     // Max amount of proposals that a deployer can do per calendar day
     //
 
 
@@ -166,11 +174,20 @@ contract DssGov {
         else if (what == "proposalLifetime") proposalLifetime = data;
         else if (what == "minGovStake") minGovStake = data;
         else if (what == "gasStakeAmt") gasStakeAmt = data;
+        else if (what == "maxPropDeployer") maxPropDeployer = data;
         else if (what == "threshold") {
             require(data >= MIN_THRESHOLD && data <= MAX_THRESHOLD, "DssGov/threshold-not-safe-range");
             threshold = data;
         }
         else revert("DssGov/file-unrecognized-param");
+    }
+
+    function addDeployer(address usr) external auth {
+        deployers[usr] = 1;
+    }
+
+    function removeDeployer(address usr) external auth {
+        deployers[usr] = 0;
     }
 
     function delegate(address usr) external warm {
@@ -313,12 +330,25 @@ contract DssGov {
         // Check system is live
         require(live == 1, "DssGov/not-launched");
 
-        // Check user has at least the min amount of MKR for creating a proposal
-        uint256 deposit = deposits[msg.sender];
-        require(deposit >= minGovStake, "DssGov/not-minimum-amount");
+        if (deployers[msg.sender] == 1) { // If it is a deployer account
+            // Get amount of proposals made by deployer of last day
+            DeployerDay memory day = deployersPropDay[msg.sender];
+            // Get today value
+            uint256 today = block.timestamp / 1 days;
+            // Get amount of proposals made today
+            uint256 count = day.lastDay == today ? day.count : 0;
+            // Check deployer hasn't already reached the maximum per day
+            require(count < maxPropDeployer, "DssGov/max-amount-proposals-deployer"); // Max amount of proposals that a deployer can do per calendar day
+            // Increment amount of proposals made
+            deployersPropDay[msg.sender] = DeployerDay(today, _add(count, 1));
+        } else { // If not a deployer account
+            // Check user has at least the min amount of MKR for creating a proposal
+            uint256 deposit = deposits[msg.sender];
+            require(deposit >= minGovStake, "DssGov/not-minimum-amount");
 
-        // Check user has not made another proposal recently
-        require(unlockTime[msg.sender] <= block.timestamp, "DssGov/user-locked");
+            // Check user has not made another proposal recently
+            require(unlockTime[msg.sender] <= block.timestamp, "DssGov/user-locked");
+        }
 
         // Update locked time
         unlockTime[msg.sender] = _add(block.timestamp, lockDuration);

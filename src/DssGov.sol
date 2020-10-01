@@ -37,7 +37,6 @@ contract DssGov {
         uint256 count;
     }
 
-
     // Storage variables:
 
     mapping(address => uint256)                      public wards;               // Authorized addresses

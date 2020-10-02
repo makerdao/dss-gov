@@ -159,6 +159,8 @@ contract DssGovTest is DSTest {
         gov.file("proposalLifetime", 7 days);
         gov.file("threshold", 50); // 50%
         gov.file("gasStakeAmt", 50); // 50 slots of storage
+        gov.file("minGovStake", 1000 ether);
+        gov.file("maxProposerAmount", 3);
 
         exec12 = address(new GovExec(address(gov), 12 hours));
         exec0 = address(new GovExec(address(gov), 0));
@@ -303,6 +305,13 @@ contract DssGovTest is DSTest {
 
     function test_propose() public {
         _launch();
+        user2.doLock(1000 ether);
+        user2.doPropose(exec12, action1);
+    }
+
+    function testFail_propose_not_min_mkr() public {
+        _launch();
+        user2.doLock(999 ether);
         user2.doPropose(exec12, action1);
     }
 
@@ -310,7 +319,11 @@ contract DssGovTest is DSTest {
         _launch();
 
         uint user1LockedAmt = user1InitialBalance / 2;
+        uint user2LockedAmt = user2InitialBalance / 2;
+        uint user3LockedAmt = user3InitialBalance / 2;
         user1.doLock(user1LockedAmt);
+        user2.doLock(user2LockedAmt);
+        user3.doLock(user3LockedAmt);
 
         _warp(1);
 
@@ -442,10 +455,10 @@ contract DssGovTest is DSTest {
         (,,,,,, uint256 status) = gov.proposals(proposal);
         assertEq(status, gov.PROPOSAL_SCHEDULED());
 
+        user2.doLock(user2InitialBalance);
         uint256 proposalDrop = user2.doPropose(exec0, address(new ActionDrop(mom, proposal)));
-        _warp(1);
 
-        user1.doVote(proposalDrop, user1InitialBalance, gov.numSnapshots(address(user1)));
+        user1.doVote(proposalDrop, user3InitialBalance, gov.numSnapshots(address(user1)));
 
         gov.plot(proposalDrop);
         gov.exec(proposalDrop);
@@ -522,5 +535,34 @@ contract DssGovTest is DSTest {
 
         gov.clear(address(user1));
         assertEq(gov.gasStorageLength(), 0);
+    }
+
+    function test_proposer_propose() public {
+        _launch();
+        gov.addProposer(address(user3));
+        user3.doPropose(exec12, action1);
+        user3.doPropose(exec12, action1);
+        user3.doPropose(exec12, action1);
+    }
+
+    function testFail_proposer_propose_max_exceed() public {
+        _launch();
+        gov.addProposer(address(user3));
+        user3.doPropose(exec12, action1);
+        user3.doPropose(exec12, action1);
+        user3.doPropose(exec12, action1);
+        user3.doPropose(exec12, action1);
+    }
+
+    function test_proposer_propose_two_days() public {
+        _launch();
+        gov.addProposer(address(user3));
+        user3.doPropose(exec12, action1);
+        user3.doPropose(exec12, action1);
+        user3.doPropose(exec12, action1);
+        _warp(1 days / 15 + 1);
+        user3.doPropose(exec12, action1);
+        user3.doPropose(exec12, action1);
+        user3.doPropose(exec12, action1);
     }
 }

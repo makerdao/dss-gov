@@ -160,7 +160,7 @@ contract DssGovTest is DSTest {
         gov.file("threshold", 50); // 50%
         gov.file("gasStakeAmt", 50); // 50 slots of storage
         gov.file("minGovStake", 1000 ether);
-        gov.file("maxPropDeployer", 3);
+        gov.file("maxProposerAmount", 3);
 
         exec12 = address(new GovExec(address(gov), 12 hours));
         exec0 = address(new GovExec(address(gov), 0));
@@ -537,26 +537,26 @@ contract DssGovTest is DSTest {
         assertEq(gov.gasStorageLength(), 0);
     }
 
-    function test_deployer_propose() public {
+    function test_proposer_propose() public {
         _launch();
-        gov.addDeployer(address(user3));
+        gov.addProposer(address(user3));
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
     }
 
-    function testFail_deployer_propose_max_exceed() public {
+    function testFail_proposer_propose_max_exceed() public {
         _launch();
-        gov.addDeployer(address(user3));
+        gov.addProposer(address(user3));
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
     }
 
-    function test_deployer_propose_two_days() public {
+    function test_proposer_propose_two_days() public {
         _launch();
-        gov.addDeployer(address(user3));
+        gov.addProposer(address(user3));
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);

@@ -294,7 +294,7 @@ contract DssGov {
         // If already inactive return
         if (active[usr] == 0) return;
 
-        // Check the owner of the MKR and the delegated have not made any recent action
+        // Check the delegated has not made any recent action
         require(_add(lastActivity[usr], rightsLifetime) < block.timestamp, "DssGov/not-allowed-to-clear");
 
         // Mark user as inactive

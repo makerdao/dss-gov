@@ -224,7 +224,7 @@ contract DssGov {
 
         // If already existed a delegated address
         if (oldDelegated != address(0)) {
-            // Remove sender's deposits owner old delegated's voting rights
+            // Remove owner's voting rights from old delegate
             rights[oldDelegated] = _sub(rights[oldDelegated], deposit);
             // If active, save snapshot
             if(activeOld) {

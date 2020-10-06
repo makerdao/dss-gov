@@ -236,7 +236,7 @@ contract DssGov {
 
         // If setting to some delegated address
         if (newDelegated != address(0)) {
-            // Add sender's deposits to the new delegated's voting rights
+            // Add owner's voting rights to those of the new delegate
             rights[newDelegated] = _add(rights[newDelegated], deposit);
             // If active, save snapshot
             if(activeNew) {

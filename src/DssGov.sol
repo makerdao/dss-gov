@@ -200,7 +200,7 @@ contract DssGov {
         // Verify if the user is authorized to execute this change in delegation
         require(
             owner == msg.sender || // Owners can always change their own MKR delegation
-            oldDelegated == msg.sender && newDelegated == address(0) || // Delegated users can always remove delegations to them
+            oldDelegated == msg.sender && newDelegated == address(0) || // Delegated users can always remove delegations to themselves
             _add(lastActivity[owner], delegationLifetime) < block.timestamp && newDelegated == address(0), // If there is inactivity anyone can remove delegations
             "DssGov/not-authorized-delegation"
         );

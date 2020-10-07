@@ -85,6 +85,28 @@ contract DssGov {
     uint256 constant public PROPOSAL_EXECUTED   = 2;            // Proposal already executed
     uint256 constant public PROPOSAL_CANCELLED  = 3;            // Proposal cancelled
 
+    // Events:
+
+    event Rely(address indexed usr);
+    event Deny(address indexed usr);
+    event File(bytes32 indexed what, uint256 data);
+    event AddProposer(address indexed usr);
+    event RemoveProposer(address indexed usr);
+    event MintGas(bytes32 indexed src, address indexed usr, uint256 amt);
+    event BurnGas(bytes32 indexed src, address indexed usr, uint256 amt);
+    event Delegate(address indexed owner, address indexed newDelegate);
+    event Lock(address indexed usr, uint256 wad);
+    event Free(address indexed usr, uint256 wad);
+    event Clear(address indexed usr);
+    event Ping(address indexed usr);
+    event UpdateTotalActive(uint256 wad);
+    event Launch();
+    event Propose(address indexed exec, address indexed action, uint256 indexed id);
+    event Vote(uint256 indexed id, uint256 indexed sIndex, uint256 wad);
+    event Plot(uint256 indexed id);
+    event Exec(uint256 indexed id);
+    event Drop(uint256 indexed id);
+
 
     // Modifiers:
 
@@ -124,19 +146,23 @@ contract DssGov {
     }
 
     function _mint(bytes32 src, address usr) internal {
-        for (uint256 i = 0; i < gasStakeAmt; i++) {
+        uint256 amt = gasStakeAmt;
+        for (uint256 i = 0; i < amt; i++) {
             gasStorage.push(1);
         }
-        gasOwners[usr][src] = gasStakeAmt;
+        gasOwners[usr][src] = amt;
+        emit MintGas(src, usr, amt);
     }
 
     function _burn(bytes32 src, address usr) internal {
         uint256 l = gasStorage.length;
-        for (uint256 i = 1; i <= gasOwners[usr][src]; i++) {
+        uint256 amt = gasOwners[usr][src];
+        for (uint256 i = 1; i <= amt; i++) {
             delete gasStorage[l - i]; // TODO: Verify if this is necessary
             gasStorage.pop();
         }
         gasOwners[usr][src] = 0;
+        emit BurnGas(src, usr, amt);
     }
 
     function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 amount) {
@@ -153,22 +179,37 @@ contract DssGov {
     // Constructor:
 
     constructor(address govToken_) public {
+        // Assign gov token
         govToken = TokenLike(govToken_);
+
+        // Authorize msg.sender
         wards[msg.sender] = 1;
+
+        // Emit event
+        emit Rely(msg.sender);
     }
 
 
     // External functions:
 
     function rely(address usr) external auth {
+        // Authorize usr
         wards[usr] = 1;
+
+        // Emit event
+        emit Rely(usr);
     }
 
     function deny(address usr) external auth {
+        // Unauthorize usr
         wards[usr] = 0;
+
+        // Emit event
+        emit Deny(usr);
     }
 
     function file(bytes32 what, uint256 data) external auth {
+        // Update parameter
         if (what == "rightsLifetime") rightsLifetime = data;
         else if (what == "delegationLifetime") delegationLifetime = data;
         else if (what == "lockDuration") lockDuration = data; // TODO: Define if we want to place a safe max time
@@ -181,14 +222,25 @@ contract DssGov {
             threshold = data;
         }
         else revert("DssGov/file-unrecognized-param");
+
+        // Emit event
+        emit File(what, data);
     }
 
     function addProposer(address usr) external auth {
+        // Add new proposer address
         proposers[usr] = 1;
+
+        // Emit event
+        emit AddProposer(usr);
     }
 
     function removeProposer(address usr) external auth {
+        // Remove existing proposer address
         proposers[usr] = 0;
+
+        // Emit event
+        emit RemoveProposer(usr);
     }
 
     function delegate(address owner, address newDelegated) external warm {
@@ -215,11 +267,13 @@ contract DssGov {
         bool activeOld = oldDelegated != address(0) && active[oldDelegated] == 1;
         bool activeNew = newDelegated != address(0) && active[newDelegated] == 1;
 
-        // If both are active or inactive, do nothing. Otherwise update the totActive MKR
+        // If both are active or inactive, do nothing. Otherwise update the totActive MKR and emit event
         if (activeOld && !activeNew) {
             totActive = _sub(totActive, deposit);
+            emit UpdateTotalActive(totActive);
         } else if (!activeOld && activeNew) {
             totActive = _add(totActive, deposit);
+            emit UpdateTotalActive(totActive);
         }
 
         // If already existed a delegated address
@@ -245,6 +299,9 @@ contract DssGov {
         } else {
             _burn("owner", owner);
         }
+
+        // Emit event
+        emit Delegate(owner, newDelegated);
     }
 
     function lock(uint256 wad) external warm {
@@ -261,10 +318,16 @@ contract DssGov {
         if (delegated != address(0)) {
             rights[delegated] = _add(rights[delegated], wad);
             if (active[delegated] == 1) {
+                // Save user's snapshot
                 _save(delegated, rights[delegated]);
+                // Update total active and emit event
                 totActive = _add(totActive, wad);
+                emit UpdateTotalActive(totActive);
             }
         }
+
+        // Emit event
+        emit Lock(msg.sender, wad);
     }
 
     function free(uint256 wad) external warm {
@@ -281,13 +344,19 @@ contract DssGov {
         if (delegated != address(0)) {
             rights[delegated] = _sub(rights[delegated], wad);
             if (active[delegated] == 1) {
+                // Save user's snapshot
                 _save(delegated, rights[delegated]);
+                // Update total active and emit event
                 totActive = _sub(totActive, wad);
+                emit UpdateTotalActive(totActive);
             }
         }
 
         // Push MKR back to user's wallet
         govToken.transfer(msg.sender, wad);
+
+        // Emit event
+        emit Free(msg.sender, wad);
     }
 
     function clear(address usr) external {
@@ -300,14 +369,19 @@ contract DssGov {
         // Mark user as inactive
         active[usr] = 0;
 
-        // Remove the amount from the total active MKR
-        totActive = _sub(totActive, rights[usr]);
+        // Remove the amount from the total active MKR and emit event
+        uint256 r = rights[usr];
+        totActive = _sub(totActive, r);
+        emit UpdateTotalActive(totActive);
 
         // Save snapshot
         _save(usr, 0);
 
         // Burn gas storage reserve (refund for caller)
         _burn("delegated", usr);
+
+        // Emit event
+        emit Clear(usr);
     }
 
     function ping() external warm {
@@ -317,16 +391,19 @@ contract DssGov {
         // Mark the user as active
         active[msg.sender] = 1;
 
+        // Add the amount from the total active MKR and emit event
         uint256 r = rights[msg.sender];
-
-        // Add the amount from the total active MKR
         totActive = _add(totActive, r);
+        emit UpdateTotalActive(totActive);
 
         // Save snapshot
         _save(msg.sender, r);
 
         // Mint gas storage reserve
         _mint("delegated", msg.sender);
+
+        // Emit event
+        emit Ping(msg.sender);
     }
 
     function launch() external warm {
@@ -338,6 +415,9 @@ contract DssGov {
 
         // Launch system
         live = 1;
+
+        // Emit event
+        emit Launch();
     }
 
     function propose(address exec, address action) external warm returns (uint256) {
@@ -379,10 +459,13 @@ contract DssGov {
                 status: 0
         });
 
+        // Emit event
+        emit Propose(exec, action, numProposals);
+
         return numProposals;
     }
 
-    function vote(uint256 id, uint256 wad, uint256 sIndex) external warm {
+    function vote(uint256 id, uint256 sIndex, uint256 wad) external warm {
         // Verify it hasn't been already plotted, not executed nor removed
         require(proposals[id].status == PROPOSAL_PENDING, "DssGov/wrong-status");
         // Verify proposal is not expired
@@ -395,6 +478,8 @@ contract DssGov {
         proposals[id].votes[msg.sender] = wad;
         // Update total votes to the proposal
         proposals[id].totVotes = _add(_sub(proposals[id].totVotes, prev), wad);
+
+        emit Vote(id, wad, sIndex);
     }
 
     function plot(uint256 id) external warm {
@@ -408,6 +493,9 @@ contract DssGov {
         // Plot action proposal
         proposals[id].status = PROPOSAL_SCHEDULED;
         ExecLike(proposals[id].exec).plot(proposals[id].action);
+
+        // Emit event
+        emit Plot(id);
     }
 
     function exec(uint256 id) external warm {
@@ -417,6 +505,9 @@ contract DssGov {
         // Execute action proposal
         proposals[id].status = PROPOSAL_EXECUTED;
         ExecLike(proposals[id].exec).exec(proposals[id].action);
+
+        // Emit event
+        emit Exec(id);
     }
 
     function drop(uint256 id) external auth {
@@ -426,5 +517,8 @@ contract DssGov {
         // Drop action proposal
         proposals[id].status = PROPOSAL_CANCELLED;
         ExecLike(proposals[id].exec).drop(proposals[id].action);
+
+        // Emit event
+        emit Drop(id);
     }
 }

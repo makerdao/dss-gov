@@ -70,8 +70,8 @@ contract GovUser {
         id = gov.propose(exec, action);
     }
 
-    function doVote(uint256 proposal, uint256 wad, uint256 sId) public {
-        gov.vote(proposal, wad, sId);
+    function doVote(uint256 proposal, uint256 sId, uint256 wad) public {
+        gov.vote(proposal, sId, wad);
     }
 }
 
@@ -368,7 +368,7 @@ contract DssGovTest is DSTest {
         assertEq(totVotes3, 0);
 
         // Vote will full rights on proposal 1
-        user1.doVote(proposal1, user1LockedAmt, gov.numSnapshots(address(user1)));
+        user1.doVote(proposal1, gov.numSnapshots(address(user1)), user1LockedAmt);
         (,,,,, totVotes1,) = gov.proposals(proposal1);
         (,,,,, totVotes2,) = gov.proposals(proposal2);
         (,,,,, totVotes3,) = gov.proposals(proposal3);
@@ -377,7 +377,7 @@ contract DssGovTest is DSTest {
         assertEq(totVotes3, 0);
 
         // Vote will full rights on proposal 2
-        user1.doVote(proposal2, user1LockedAmt, gov.numSnapshots(address(user1)));
+        user1.doVote(proposal2, gov.numSnapshots(address(user1)), user1LockedAmt);
         (,,,,, totVotes1,) = gov.proposals(proposal1);
         (,,,,, totVotes2,) = gov.proposals(proposal2);
         (,,,,, totVotes3,) = gov.proposals(proposal3);
@@ -386,7 +386,7 @@ contract DssGovTest is DSTest {
         assertEq(totVotes3, 0);
 
         // Vote will full rights on proposal 3
-        user1.doVote(proposal3, user1LockedAmt, gov.numSnapshots(address(user1)));
+        user1.doVote(proposal3, gov.numSnapshots(address(user1)), user1LockedAmt);
         (,,,,, totVotes1,) = gov.proposals(proposal1);
         (,,,,, totVotes2,) = gov.proposals(proposal2);
         (,,,,, totVotes3,) = gov.proposals(proposal3);
@@ -395,7 +395,7 @@ contract DssGovTest is DSTest {
         assertEq(totVotes3, user1LockedAmt);
 
         // Remove all votes from proposal 1
-        user1.doVote(proposal1, 0, gov.numSnapshots(address(user1)));
+        user1.doVote(proposal1, gov.numSnapshots(address(user1)), 0);
         (,,,,, totVotes1,) = gov.proposals(proposal1);
         (,,,,, totVotes2,) = gov.proposals(proposal2);
         (,,,,, totVotes3,) = gov.proposals(proposal3);
@@ -404,7 +404,7 @@ contract DssGovTest is DSTest {
         assertEq(totVotes3, user1LockedAmt);
 
         // Remove all votes from proposal 2
-        user1.doVote(proposal2, 0, gov.numSnapshots(address(user1)));
+        user1.doVote(proposal2, gov.numSnapshots(address(user1)), 0);
         (,,,,, totVotes1,) = gov.proposals(proposal1);
         (,,,,, totVotes2,) = gov.proposals(proposal2);
         (,,,,, totVotes3,) = gov.proposals(proposal3);
@@ -413,7 +413,7 @@ contract DssGovTest is DSTest {
         assertEq(totVotes3, user1LockedAmt);
 
         // Remove half of voting rights from proposal 3
-        user1.doVote(proposal3, user1LockedAmt / 2, gov.numSnapshots(address(user1)));
+        user1.doVote(proposal3, gov.numSnapshots(address(user1)), user1LockedAmt / 2);
         (,,,,, totVotes1,) = gov.proposals(proposal1);
         (,,,,, totVotes2,) = gov.proposals(proposal2);
         (,,,,, totVotes3,) = gov.proposals(proposal3);
@@ -432,7 +432,7 @@ contract DssGovTest is DSTest {
         (,,,,,, uint256 status) = gov.proposals(proposal);
         assertEq(status, gov.PROPOSAL_PENDING());
 
-        user1.doVote(proposal, user1InitialBalance, gov.numSnapshots(address(user1)));
+        user1.doVote(proposal, gov.numSnapshots(address(user1)), user1InitialBalance);
 
         gov.plot(proposal);
         (,,,,,, status) = gov.proposals(proposal);
@@ -452,7 +452,7 @@ contract DssGovTest is DSTest {
         _warp(1);
 
         uint256 proposal = user1.doPropose(exec12, action1);
-        user1.doVote(proposal, user1InitialBalance, gov.numSnapshots(address(user1)));
+        user1.doVote(proposal, gov.numSnapshots(address(user1)), user1InitialBalance);
 
         gov.plot(proposal);
         gov.exec(proposal);
@@ -465,7 +465,7 @@ contract DssGovTest is DSTest {
         _warp(1);
 
         uint256 proposal = user1.doPropose(exec12, action1);
-        user1.doVote(proposal, user1InitialBalance, gov.numSnapshots(address(user1)));
+        user1.doVote(proposal, gov.numSnapshots(address(user1)), user1InitialBalance);
 
         gov.exec(proposal);
     }
@@ -478,7 +478,7 @@ contract DssGovTest is DSTest {
 
         uint256 proposal = user1.doPropose(exec12, action1);
 
-        user1.doVote(proposal, user1InitialBalance, gov.numSnapshots(address(user1)));
+        user1.doVote(proposal, gov.numSnapshots(address(user1)), user1InitialBalance);
 
         gov.plot(proposal);
         (,,,,,, uint256 status) = gov.proposals(proposal);
@@ -487,7 +487,7 @@ contract DssGovTest is DSTest {
         user2.doLock(user2InitialBalance);
         uint256 proposalDrop = user2.doPropose(exec0, address(new ActionDrop(mom, proposal)));
 
-        user1.doVote(proposalDrop, user3InitialBalance, gov.numSnapshots(address(user1)));
+        user1.doVote(proposalDrop, gov.numSnapshots(address(user1)), user3InitialBalance);
 
         gov.plot(proposalDrop);
         gov.exec(proposalDrop);

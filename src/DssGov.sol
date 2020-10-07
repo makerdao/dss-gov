@@ -421,7 +421,7 @@ contract DssGov {
 
     function drop(uint256 id) external auth {
         // Verify it hasn't been already cancelled
-        require(proposals[id].status < PROPOSAL_CANCELLED, "DssGov/wrong-status");
+        require(proposals[id].status < PROPOSAL_EXECUTED, "DssGov/wrong-status");
 
         // Drop action proposal
         proposals[id].status = PROPOSAL_CANCELLED;

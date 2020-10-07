@@ -62,8 +62,8 @@ contract GovUser {
         gov.free(wad);
     }
 
-    function doDelegate(address usr) public {
-        gov.delegate(usr);
+    function doDelegate(address owner, address to) public {
+        gov.delegate(owner, to);
     }
 
     function doPropose(address exec, address action) public returns (uint256 id) {
@@ -156,6 +156,7 @@ contract DssGovTest is DSTest {
         // Gov set up
         gov = new DssGov(address(govToken));
         gov.file("rightsLifetime", 30 days);
+        gov.file("delegationLifetime", 90 days);
         gov.file("proposalLifetime", 7 days);
         gov.file("threshold", 50); // 50%
         gov.file("gasStakeAmt", 50); // 50 slots of storage
@@ -223,9 +224,37 @@ contract DssGovTest is DSTest {
         assertEq(gov.delegates(address(user1)), address(0));
         assertEq(gov.rights(address(user2)), 0);
         user1.doLock(user1InitialBalance);
-        user1.doDelegate(address(user2));
+        user1.doDelegate(address(user1), address(user2));
         assertEq(gov.delegates(address(user1)), address(user2));
         assertEq(gov.rights(address(user2)), user1InitialBalance);
+    }
+
+    function test_remove_delegation_delegated() public {
+        user1.doDelegate(address(user1), address(user2));
+        user2.doDelegate(address(user1), address(0));
+    }
+
+    function testFail_change_delegation_delegated() public {
+        user1.doDelegate(address(user1), address(user2));
+        user2.doDelegate(address(user1), address(1));
+    }
+
+    function test_remove_delegation_inactivity() public {
+        user1.doDelegate(address(user1), address(user2));
+        _warp(gov.delegationLifetime() / 15 + 1);
+        gov.delegate(address(user1), address(0));
+    }
+
+    function testFail_remove_delegation_inactivity() public {
+        user1.doDelegate(address(user1), address(user2));
+        _warp(gov.delegationLifetime() / 15 - 1);
+        gov.delegate(address(user1), address(0));
+    }
+
+    function testFail_change_delegation_inactivity() public {
+        user1.doDelegate(address(user1), address(user2));
+        _warp(gov.delegationLifetime() / 15 + 1);
+        user2.doDelegate(address(user1), address(1));
     }
 
     function test_snapshot() public {
@@ -245,7 +274,7 @@ contract DssGovTest is DSTest {
         assertEq(rights, 0);
 
         _warp(1);
-        user1.doDelegate(address(user1));
+        user1.doDelegate(address(user1), address(user1));
 
         num = gov.numSnapshots(address(user1));
         assertEq(gov.numSnapshots(address(user1)), 2);
@@ -256,7 +285,7 @@ contract DssGovTest is DSTest {
 
     function test_ping() public {
         user1.doLock(user1InitialBalance);
-        user1.doDelegate(address(user1));
+        user1.doDelegate(address(user1), address(user1));
         assertEq(gov.active(address(user1)), 0);
         assertEq(gov.totActive(), 0);
         user1.doPing();
@@ -266,7 +295,7 @@ contract DssGovTest is DSTest {
 
     function test_clear() public {
         user1.doLock(user1InitialBalance);
-        user1.doDelegate(address(user1));
+        user1.doDelegate(address(user1), address(user1));
         user1.doPing();
         assertEq(gov.active(address(user1)), 1);
         assertEq(gov.totActive(), user1InitialBalance);
@@ -288,17 +317,17 @@ contract DssGovTest is DSTest {
         user2.doLock(25000 ether);
         assertTrue(!_tryLaunch());
         user1.doPing();
-        user1.doDelegate(address(user1));
+        user1.doDelegate(address(user1), address(user1));
         assertTrue(!_tryLaunch());
         user2.doPing();
-        user2.doDelegate(address(user2));
+        user2.doDelegate(address(user2), address(user2));
         assertTrue(_tryLaunch());
     }
 
     function _launch() internal {
         user1.doLock(100000 ether);
         user1.doPing();
-        user1.doDelegate(address(user1));
+        user1.doDelegate(address(user1), address(user1));
         gov.launch();
         user1.doFree(100000 ether);
     }
@@ -481,13 +510,19 @@ contract DssGovTest is DSTest {
         gov.file("threshold", gov.MAX_THRESHOLD() + 1);
     }
 
-    function test_mint() public {
+    function test_mint_ping() public {
+        assertEq(gov.gasOwners(address(user1), "delegated"), 0);
+        assertEq(gov.gasOwners(address(user1), "delegated"), 0);
+        assertEq(gov.gasOwners(address(user3), "delegated"), 0);
         assertEq(gov.gasStorageLength(), 0);
         user1.doPing();
+        assertEq(gov.gasOwners(address(user1), "delegated"), 50);
         assertEq(gov.gasStorageLength(), 50);
         user2.doPing();
+        assertEq(gov.gasOwners(address(user2), "delegated"), 50);
         assertEq(gov.gasStorageLength(), 100);
         user3.doPing();
+        assertEq(gov.gasOwners(address(user3), "delegated"), 50);
         assertEq(gov.gasStorageLength(), 150);
 
         for(uint256 i = 0; i < 150; i++) {
@@ -495,14 +530,56 @@ contract DssGovTest is DSTest {
         }
     }
 
-    function test_burn() public {
+    function test_burn_clear() public {
         user1.doPing();
         user2.doPing();
         user3.doPing();
         assertEq(gov.gasStorageLength(), 150);
         _warp(gov.rightsLifetime() / 15 + 1);
 
+        assertEq(gov.gasOwners(address(user3), "delegated"), 50);
         gov.clear(address(user3));
+        assertEq(gov.gasOwners(address(user3), "delegated"), 0);
+        assertEq(gov.gasStorageLength(), 100);
+
+        for(uint256 i = 0; i < 100; i++) {
+            assertEq(gov.gasStorage(i), 1);
+        }
+        // for(uint256 i = 100; i < 150; i++) {
+        //     assertEq(gov.gasStorage(i), 0);
+        // }
+    }
+
+    function test_mint_delegation() public {
+        assertEq(gov.gasOwners(address(user1), "owner"), 0);
+        assertEq(gov.gasOwners(address(user1), "owner"), 0);
+        assertEq(gov.gasOwners(address(user3), "owner"), 0);
+        assertEq(gov.gasStorageLength(), 0);
+        user1.doDelegate(address(user1), address(user1));
+        assertEq(gov.gasOwners(address(user1), "owner"), 50);
+        assertEq(gov.gasStorageLength(), 50);
+        user2.doDelegate(address(user2), address(user2));
+        assertEq(gov.gasOwners(address(user2), "owner"), 50);
+        assertEq(gov.gasStorageLength(), 100);
+        user3.doDelegate(address(user3), address(user3));
+        assertEq(gov.gasOwners(address(user3), "owner"), 50);
+        assertEq(gov.gasStorageLength(), 150);
+
+        for(uint256 i = 0; i < 150; i++) {
+            assertEq(gov.gasStorage(i), 1);
+        }
+    }
+
+    function test_burn_delegation() public {
+        user1.doDelegate(address(user1), address(user1));
+        user2.doDelegate(address(user2), address(user2));
+        user3.doDelegate(address(user3), address(user3));
+        assertEq(gov.gasStorageLength(), 150);
+        _warp(gov.delegationLifetime() / 15 + 1);
+
+        assertEq(gov.gasOwners(address(user3), "owner"), 50);
+        gov.delegate(address(user3), address(0));
+        assertEq(gov.gasOwners(address(user3), "owner"), 0);
         assertEq(gov.gasStorageLength(), 100);
 
         for(uint256 i = 0; i < 100; i++) {

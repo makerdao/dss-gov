@@ -43,7 +43,7 @@ contract DssGov {
     uint256                                          public live;                // System liveness
     TokenLike                                        public govToken;            // MKR gov token
     uint256[]                                        public gasStorage;          // Gas storage reserve
-    mapping(address => uint256)                      public gasOwners;           // User => Gas staked
+    mapping(address => mapping(bytes32 => uint256))  public gasOwners;           // User => Source => Gas staked
     mapping(address => uint256)                      public deposits;            // User => MKR deposited
     mapping(address => address)                      public delegates;           // User => Delegated User
     mapping(address => uint256)                      public rights;              // User => Voting rights
@@ -59,6 +59,7 @@ contract DssGov {
     mapping(address => mapping(uint256 => Snapshot)) public snapshots;           // User => Index => Snapshot
     // Admin params
     uint256                                          public rightsLifetime;      // Delegated rights lifetime without activity of the delegated
+    uint256                                          public delegationLifetime;  // Lifetime of delegation without activity of the MKR owner
     uint256                                          public lockDuration;        // Min time after making a proposal for a second one or freeing MKR
     uint256                                          public proposalLifetime;    // Duration of a proposal's validity
     uint256                                          public minGovStake;         // Min MKR stake for launching a vote
@@ -122,20 +123,20 @@ contract DssGov {
         }
     }
 
-    function _mint(address usr) internal {
+    function _mint(bytes32 src, address usr) internal {
         for (uint256 i = 0; i < gasStakeAmt; i++) {
             gasStorage.push(1);
         }
-        gasOwners[usr] = gasStakeAmt;
+        gasOwners[usr][src] = gasStakeAmt;
     }
 
-    function _burn(address usr) internal {
+    function _burn(bytes32 src, address usr) internal {
         uint256 l = gasStorage.length;
-        for (uint256 i = 1; i <= gasOwners[usr]; i++) {
+        for (uint256 i = 1; i <= gasOwners[usr][src]; i++) {
             delete gasStorage[l - i]; // TODO: Verify if this is necessary
             gasStorage.pop();
         }
-        gasOwners[usr] = 0;
+        gasOwners[usr][src] = 0;
     }
 
     function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 amount) {
@@ -169,6 +170,7 @@ contract DssGov {
 
     function file(bytes32 what, uint256 data) external auth {
         if (what == "rightsLifetime") rightsLifetime = data;
+        else if (what == "delegationLifetime") delegationLifetime = data;
         else if (what == "lockDuration") lockDuration = data; // TODO: Define if we want to place a safe max time
         else if (what == "proposalLifetime") proposalLifetime = data;
         else if (what == "minGovStake") minGovStake = data;
@@ -189,46 +191,59 @@ contract DssGov {
         proposers[usr] = 0;
     }
 
-    function delegate(address usr) external warm {
+    function delegate(address owner, address newDelegated) external warm {
         // Get actual delegated address
-        address prev = delegates[msg.sender];
+        address oldDelegated = delegates[owner];
         // Verify it is not trying to set again the actual address
-        require(usr != prev, "DssGov-already-delegated");
+        require(newDelegated != oldDelegated, "DssGov-already-delegated");
+
+        // Verify if the user is authorized to execute this change in delegation
+        require(
+            owner == msg.sender || // Owners can always change their own MKR delegation
+            oldDelegated == msg.sender && newDelegated == address(0) || // Delegated users can always remove delegations to themselves
+            _add(lastActivity[owner], delegationLifetime) < block.timestamp && newDelegated == address(0), // If there is inactivity anyone can remove delegations
+            "DssGov/not-authorized-delegation"
+        );
 
         // Set new delegated address
-        delegates[msg.sender] = usr;
+        delegates[owner] = newDelegated;
 
-        // Get sender deposits
-        uint256 deposit = deposits[msg.sender];
+        // Get owner's deposits
+        uint256 deposit = deposits[owner];
 
-        bool activePrev = prev != address(0) && active[prev] == 1;
-        bool activeUsr = usr != address(0) && active[usr] == 1;
+        // Check if old and new delegated addresses are active
+        bool activeOld = oldDelegated != address(0) && active[oldDelegated] == 1;
+        bool activeNew = newDelegated != address(0) && active[newDelegated] == 1;
 
-        // If both are active or inactive, do nothing. Otherwise change the totActive MKR
-        if (activePrev && !activeUsr) {
+        // If both are active or inactive, do nothing. Otherwise update the totActive MKR
+        if (activeOld && !activeNew) {
             totActive = _sub(totActive, deposit);
-        } else if (!activePrev && activeUsr) {
+        } else if (!activeOld && activeNew) {
             totActive = _add(totActive, deposit);
         }
 
         // If already existed a delegated address
-        if (prev != address(0)) {
-            // Remove sender's deposits from old delegated's voting rights
-            rights[prev] = _sub(rights[prev], deposit);
+        if (oldDelegated != address(0)) {
+            // Remove owner's voting rights from old delegate
+            rights[oldDelegated] = _sub(rights[oldDelegated], deposit);
             // If active, save snapshot
-            if(activePrev) {
-                _save(prev, rights[prev]);
+            if(activeOld) {
+                _save(oldDelegated, rights[oldDelegated]);
             }
+        } else {
+            _mint("owner", owner);
         }
 
         // If setting to some delegated address
-        if (usr != address(0)) {
-            // Add sender's deposits to the new delegated's voting rights
-            rights[usr] = _add(rights[usr], deposit);
+        if (newDelegated != address(0)) {
+            // Add owner's voting rights to those of the new delegate
+            rights[newDelegated] = _add(rights[newDelegated], deposit);
             // If active, save snapshot
-            if(activeUsr) {
-                _save(usr, rights[usr]);
+            if(activeNew) {
+                _save(newDelegated, rights[newDelegated]);
             }
+        } else {
+            _burn("owner", owner);
         }
     }
 
@@ -279,7 +294,7 @@ contract DssGov {
         // If already inactive return
         if (active[usr] == 0) return;
 
-        // Check the owner of the MKR and the delegated have not made any recent action
+        // Check the delegated has not made any recent action
         require(_add(lastActivity[usr], rightsLifetime) < block.timestamp, "DssGov/not-allowed-to-clear");
 
         // Mark user as inactive
@@ -292,7 +307,7 @@ contract DssGov {
         _save(usr, 0);
 
         // Burn gas storage reserve (refund for caller)
-        _burn(usr);
+        _burn("delegated", usr);
     }
 
     function ping() external warm {
@@ -311,7 +326,7 @@ contract DssGov {
         _save(msg.sender, r);
 
         // Mint gas storage reserve
-        _mint(msg.sender);
+        _mint("delegated", msg.sender);
     }
 
     function launch() external warm {

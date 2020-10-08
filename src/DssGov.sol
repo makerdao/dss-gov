@@ -102,7 +102,7 @@ contract DssGov {
     event UpdateTotalActive(uint256 wad);
     event Launch();
     event Propose(address indexed exec, address indexed action, uint256 indexed id);
-    event Vote(uint256 indexed id, uint256 indexed sIndex, uint256 wad);
+    event Vote(uint256 indexed id, uint256 indexed snapshotIndex, uint256 wad);
     event Plot(uint256 indexed id);
     event Exec(uint256 indexed id);
     event Drop(uint256 indexed id);
@@ -465,13 +465,13 @@ contract DssGov {
         return numProposals;
     }
 
-    function vote(uint256 id, uint256 sIndex, uint256 wad) external warm {
+    function vote(uint256 id, uint256 snapshotIndex, uint256 wad) external warm {
         // Verify it hasn't been already plotted, not executed nor removed
         require(proposals[id].status == PROPOSAL_PENDING, "DssGov/wrong-status");
         // Verify proposal is not expired
         require(proposals[id].end >= block.timestamp, "DssGov/proposal-expired");
         // Verify amount for voting is lower or equal than voting rights
-        require(wad <= _getUserRights(msg.sender, sIndex, proposals[id].blockNum), "DssGov/amount-exceeds-rights");
+        require(wad <= _getUserRights(msg.sender, snapshotIndex, proposals[id].blockNum), "DssGov/amount-exceeds-rights");
 
         uint256 prev = proposals[id].votes[msg.sender];
         // Update voting rights used by the user
@@ -479,7 +479,7 @@ contract DssGov {
         // Update total votes to the proposal
         proposals[id].totVotes = _add(_sub(proposals[id].totVotes, prev), wad);
 
-        emit Vote(id, wad, sIndex);
+        emit Vote(id, snapshotIndex, wad);
     }
 
     function plot(uint256 id) external warm {

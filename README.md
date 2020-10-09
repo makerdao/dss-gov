@@ -32,7 +32,7 @@ It is an `auth` function. Changes a governance setting.
 
 ### addProposer(address usr)
 
-It is an `auth` function. Adds `usr` to the whitelist of regular proposers (which do not need MKR to make a proposal).
+It is an `auth` function. Adds `usr` to the whitelist of regular proposers (which do not need to stake MKR to make a proposal).
 
 ### removeProposer(address usr)
 
@@ -72,7 +72,7 @@ Requires `msg.sender` was previously marked as inactive or it is the first time 
 
 Launches the system. This function is meant to activate the system and just to be used once.
 
-Requires a minimum amount of MKR is deposited and active in the contract.
+Requires that a minimum amount of MKR is deposited and active in the contract.
 
 ### propose(address exec, address action)
 
@@ -99,7 +99,7 @@ Requires it has enough votes supporting it.
 
 Executes proposal number `id`.
 
-Requires the proposal has already been scheduled and the delay has passed.
+Requires that the proposal has already been scheduled and the delay has passed.
 
 ### drop(uint256 id)
 

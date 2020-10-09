@@ -89,6 +89,8 @@ Votes proposal number `id` with `wad` amount of MKR.
 
 Requires passing the correct `snapshotIndex` and having `wad` <= voting rights at that `snapshotIndex`.
 
+The correct `snapshotIndex` of a user is the last snapshot created for that user, which is previous to the creation of the proposal to be voted. (`snapshot.fromBlock < proposal.blockNum`).
+
 ### plot(uint256 id)
 
 Schedules proposal number `id`

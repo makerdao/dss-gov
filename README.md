@@ -14,7 +14,7 @@ This repository contains three main contracts:
 
 ## Authorization schema
 
-![Authorization schema](auth-schema.png)
+![Authorization schema](docs/auth-schema.png)
 
 ## Public functions
 

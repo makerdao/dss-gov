@@ -266,7 +266,7 @@ contract DssGov {
         // Get actual delegated address
         address oldDelegated = delegates[owner];
         // Verify it is not trying to set again the actual address
-        require(newDelegated != oldDelegated, "DssGov-already-delegated");
+        require(newDelegated != oldDelegated, "DssGov/already-delegated");
 
         // Verify if the user is authorized to execute this change in delegation
         require(

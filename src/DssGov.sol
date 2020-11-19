@@ -18,7 +18,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 pragma solidity ^0.6.7;
-pragma experimental ABIEncoderV2;
 
 interface TokenLike {
     function transferFrom(address, address, uint256) external;
@@ -47,30 +46,26 @@ contract DssGov {
     }
 
     struct User {
-        mapping(bytes32 => uint256)  gasOwners;     // User => Source => Gas staked
-        uint256                      deposit;       // User => MKR deposited
-        address                      delegate;      // User => Delegated User
-        uint256                      rights;        // User => Voting rights
-        uint256                      active;        // User => 1 if User is active, otherwise 0
-        uint256                      lastActivity;  // User => Last activity time
-        uint256                      unlockTime;    // User => Time to be able to free MKR or make a new proposal
-        uint256                      numSnapshots;  // User => Amount of snapshots
-        mapping(uint256 => Snapshot) snapshots;     // User => Index => Snapshot
+        mapping(bytes32 => uint256)  gasOwners;     // Source => Gas staked
+        uint256                      deposit;       // MKR deposited
+        address                      delegate;      // Delegated User
+        uint256                      rights;        // Voting rights
+        uint256                      active;        // 1 if User is active, otherwise 0
+        uint256                      lastActivity;  // Last activity time
+        uint256                      unlockTime;    // Time to be able to free MKR or make a new proposal
+        uint256                      numSnapshots;  // Amount of snapshots
+        mapping(uint256 => Snapshot) snapshots;     // Index => Snapshot
     }
 
     struct Proposer {
-        uint256           allowed;            // Proposer => Allowed to propose without MKR deposit
-        ProposerDayAmount proposerDayAmount;  // Proposer => Proposer Day Amount (last day, amount)
+        uint256 allowed;  // Allowed to propose without MKR deposit
+        uint256 lastDay;  // Day of last proposal
+        uint256 count;    // Number of proposals per day  
     }
 
     struct Snapshot {
         uint256 fromBlock;
         uint256 rights;
-    }
-
-    struct ProposerDayAmount {
-        uint256 lastDay;
-        uint256 count;
     }
 
     /*** Storage ***/
@@ -444,15 +439,17 @@ contract DssGov {
 
         if (proposers[msg.sender].allowed == 1) { // If it is a proposer account
             // Get amount of proposals made by the proposer the last day
-            ProposerDayAmount memory day = proposers[msg.sender].proposerDayAmount;
+            uint256 lastDay = proposers[msg.sender].lastDay;
+            uint256 count   = proposers[msg.sender].count;
             // Get today value
             uint256 today = block.timestamp / 1 days;
             // Get amount of proposals made today
-            uint256 count = day.lastDay == today ? day.count : 0;
+            count = lastDay == today ? count : 0;
             // Check proposer hasn't already reached the maximum per day
             require(count < maxProposerAmount, "DssGov/max-amount-proposals-proposer"); // Max amount of proposals that a proposer can do per calendar day
             // Increment amount of proposals made
-            proposers[msg.sender].proposerDayAmount = ProposerDayAmount(today, _add(count, 1));
+            proposers[msg.sender].lastDay = today;
+            proposers[msg.sender].count = _add(count, 1);
         } else { // If not a proposer account
             // Check user has at least the min amount of MKR for creating a proposal
             uint256 deposit = users[msg.sender].deposit;

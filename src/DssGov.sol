@@ -107,26 +107,25 @@ contract DssGov {
     uint256 constant public PROPOSAL_CANCELLED = 3;             // Proposal cancelled
 
     /*** Events ***/
-    event           Rely(address indexed usr);
-    event           Deny(address indexed usr);
-    event           File(bytes32 indexed what, uint256 data);
-    event    AddProposer(address indexed usr);
+    event Rely(address indexed usr);
+    event Deny(address indexed usr);
+    event File(bytes32 indexed what, uint256 data);
+    event AddProposer(address indexed usr);
     event RemoveProposer(address indexed usr);
-    event        MintGas(bytes32 indexed src, address indexed usr, uint256 amt);
-    event        BurnGas(bytes32 indexed src, address indexed usr, uint256 amt);
-    event       Delegate(address indexed owner, address indexed newDelegate);
-    event           Lock(address indexed usr, uint256 wad);
-    event           Free(address indexed usr, uint256 wad);
-    event          Clear(address indexed usr);
-    event           Ping(address indexed usr);
-    event        Propose(address indexed exec, address indexed action, uint256 indexed id);
-    event           Vote(uint256 indexed id, uint256 indexed snapshotIndex, uint256 wad);
-    event           Plot(uint256 indexed id);
-    event           Exec(uint256 indexed id);
-    event           Drop(uint256 indexed id);
-
+    event MintGas(bytes32 indexed src, address indexed usr, uint256 amt);
+    event BurnGas(bytes32 indexed src, address indexed usr, uint256 amt);
+    event Delegate(address indexed owner, address indexed newDelegate);
+    event Lock(address indexed usr, uint256 wad);
+    event Free(address indexed usr, uint256 wad);
+    event Clear(address indexed usr);
+    event Ping(address indexed usr);
     event UpdateTotalActive(uint256 wad);
     event Launch();
+    event Propose(address indexed exec, address indexed action, uint256 indexed id);
+    event Vote(uint256 indexed id, uint256 indexed snapshotIndex, uint256 wad);
+    event Plot(uint256 indexed id);
+    event Exec(uint256 indexed id);
+    event Drop(uint256 indexed id);
 
     /*** Modifiers ***/
     modifier auth {

@@ -697,4 +697,25 @@ contract DssGovTest is DSTest {
         _warp(1);
         user1.doFree(user1LockedAmt);
     }
+
+    function test_vote_delegate_lock() public {
+        _launch();
+        uint256 userLockedAmt = 100000 ether;
+        gov.file("voteLockDuration", 1 days);
+        gov.addProposer(address(user3));
+        user2.doLock(userLockedAmt);
+        user2.doDelegate(address(user2), address(user1));
+        _warp(1);
+        uint256 proposal1 = user3.doPropose(exec0, action1);
+        (,,,,,,, uint256 numSnapshots) = gov.users(address(user1));
+        user1.doVote(proposal1, numSnapshots, userLockedAmt);
+        (,,,,,, uint256 voteUnlockTime,) = gov.users(address(user2));
+        assertEq(voteUnlockTime, 0);
+        assertTrue(!user2.tryFree(userLockedAmt));
+        _warp(1 days / 15 - 1);
+        user2.doDelegate(address(user2), address(user2));
+        assertTrue(!user2.tryFree(userLockedAmt));
+        _warp(1);
+        user2.doFree(userLockedAmt);
+    }
 }

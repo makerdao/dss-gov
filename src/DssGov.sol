@@ -46,7 +46,6 @@ contract DssGov {
     }
 
     struct User {
-        mapping(bytes32 => uint256)  gasOwners;     // Source => Gas staked
         uint256                      deposit;       // MKR deposited
         address                      delegate;      // Delegated User
         uint256                      rights;        // Voting rights
@@ -55,12 +54,13 @@ contract DssGov {
         uint256                      unlockTime;    // Time to be able to free MKR or make a new proposal
         uint256                      numSnapshots;  // Amount of snapshots
         mapping(uint256 => Snapshot) snapshots;     // Index => Snapshot
+        mapping(bytes32 => uint256)  gasOwners;     // Source => Gas staked
     }
 
     struct Proposer {
         uint256 allowed;  // Allowed to propose without MKR deposit
         uint256 lastDay;  // Day of last proposal
-        uint256 count;    // Number of proposals per day  
+        uint256 count;    // Number of proposals per day
     }
 
     struct Snapshot {
@@ -93,8 +93,8 @@ contract DssGov {
     function votes(uint256 id, address usr)      external view returns (uint256) { return proposals[id].votes[usr];  }
     function gasOwners(address usr, bytes32 src) external view returns (uint256) { return users[usr].gasOwners[src]; }
     function gasStorageLength()                  external view returns (uint256) { return gasStorage.length; }
-    function snapshots(address usr, uint256 num) external view returns (uint256, uint256) { 
-        return (users[usr].snapshots[num].fromBlock, users[usr].snapshots[num].rights); 
+    function snapshots(address usr, uint256 num) external view returns (uint256, uint256) {
+        return (users[usr].snapshots[num].fromBlock, users[usr].snapshots[num].rights);
     }
 
     /*** Constants */

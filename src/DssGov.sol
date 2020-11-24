@@ -33,8 +33,7 @@ interface ExecLike {
 
 contract DssGov {
 
-    // Structs:
-
+    /*** Structs ***/
     struct Proposal {
         uint256 blockNum;
         uint256 end;
@@ -46,66 +45,68 @@ contract DssGov {
         mapping(address => uint256) votes;
     }
 
+    struct User {
+        mapping(bytes32 => uint256)  gasOwners;     // Source => Gas staked
+        uint256                      deposit;       // MKR deposited
+        address                      delegate;      // Delegated User
+        uint256                      rights;        // Voting rights
+        uint256                      active;        // 1 if User is active, otherwise 0
+        uint256                      lastActivity;  // Last activity time
+        uint256                      unlockTime;    // Time to be able to free MKR or make a new proposal
+        uint256                      numSnapshots;  // Amount of snapshots
+        mapping(uint256 => Snapshot) snapshots;     // Index => Snapshot
+    }
+
+    struct Proposer {
+        uint256 allowed;  // Allowed to propose without MKR deposit
+        uint256 lastDay;  // Day of last proposal
+        uint256 count;    // Number of proposals per day  
+    }
+
     struct Snapshot {
         uint256 fromBlock;
         uint256 rights;
     }
 
-    struct ProposerDayAmount {
-        uint256 lastDay;
-        uint256 count;
+    /*** Storage ***/
+    mapping(address => uint256)  public wards;         // Authorized addresses
+    uint256                      public live;          // System liveness
+    TokenLike                    public govToken;      // MKR gov token
+    uint256[]                    public gasStorage;    // Gas storage reserve
+    uint256                      public totActive;     // Total active MKR
+    uint256                      public numProposals;  // Amount of Proposals
+    mapping(uint256 => Proposal) public proposals;     // Proposal Id => Proposal Info
+    mapping(address => Proposer) public proposers;     // Proposer Address => Proposer Info
+    mapping(address => User)     public users;         // User Address => User Info
+
+    /*** Governance Params */
+    uint256 public rightsLifetime;      // Delegated rights lifetime without activity of the delegated
+    uint256 public delegationLifetime;  // Lifetime of delegation without activity of the MKR owner
+    uint256 public lockDuration;        // Min time after making a proposal for a second one or freeing MKR
+    uint256 public proposalLifetime;    // Duration of a proposal's validity
+    uint256 public minGovStake;         // Min MKR stake for launching a vote
+    uint256 public threshold;           // Min % of total locked MKR to approve a proposal
+    uint256 public gasStakeAmt;         // Amount of gas to stake when executing ping
+    uint256 public maxProposerAmount;   // Max amount of proposals that a proposer can do per calendar day
+
+    /*** Getters */
+    function votes(uint256 id, address usr)      external view returns (uint256) { return proposals[id].votes[usr];  }
+    function gasOwners(address usr, bytes32 src) external view returns (uint256) { return users[usr].gasOwners[src]; }
+    function gasStorageLength()                  external view returns (uint256) { return gasStorage.length; }
+    function snapshots(address usr, uint256 num) external view returns (uint256, uint256) { 
+        return (users[usr].snapshots[num].fromBlock, users[usr].snapshots[num].rights); 
     }
 
-    // Storage variables:
+    /*** Constants */
+    uint256 constant public LAUNCH_THRESHOLD   = 100000 ether;  // Min amount of totalActive MKR to launch the system
+    uint256 constant public MIN_THRESHOLD      = 40;            // Min threshold value that admin can set
+    uint256 constant public MAX_THRESHOLD      = 60;            // Max threshold value that admin can set
+    uint256 constant public PROPOSAL_PENDING   = 0;             // New proposal created (being voted)
+    uint256 constant public PROPOSAL_SCHEDULED = 1;             // Proposal scheduled for being executed
+    uint256 constant public PROPOSAL_EXECUTED  = 2;             // Proposal already executed
+    uint256 constant public PROPOSAL_CANCELLED = 3;             // Proposal cancelled
 
-    mapping(address => uint256)                      public wards;               // Authorized addresses
-    uint256                                          public live;                // System liveness
-    TokenLike                                        public govToken;            // MKR gov token
-    uint256[]                                        public gasStorage;          // Gas storage reserve
-    mapping(address => mapping(bytes32 => uint256))  public gasOwners;           // User => Source => Gas staked
-    mapping(address => uint256)                      public deposits;            // User => MKR deposited
-    mapping(address => address)                      public delegates;           // User => Delegated User
-    mapping(address => uint256)                      public rights;              // User => Voting rights
-    uint256                                          public totActive;           // Total active MKR
-    mapping(address => uint256)                      public active;              // User => 1 if User is active, otherwise 0
-    mapping(address => uint256)                      public lastActivity;        // User => Last activity time
-    mapping(address => uint256)                      public unlockTime;          // User => Time to be able to free MKR or make a new proposal
-    mapping(address => uint256)                      public proposers;           // Proposer => Allowed to propose without MKR deposit
-    mapping(address => ProposerDayAmount)            public proposerDayAmounts;  // Proposer => Proposer Day Amount (last day, amount)
-    uint256                                          public numProposals;        // Amount of Proposals
-    mapping(uint256 => Proposal)                     public proposals;           // Proposal Id => Proposal Info
-    mapping(address => uint256)                      public numSnapshots;        // User => Amount of snapshots
-    mapping(address => mapping(uint256 => Snapshot)) public snapshots;           // User => Index => Snapshot
-    // Admin params
-    uint256                                          public rightsLifetime;      // Delegated rights lifetime without activity of the delegated
-    uint256                                          public delegationLifetime;  // Lifetime of delegation without activity of the MKR owner
-    uint256                                          public lockDuration;        // Min time after making a proposal for a second one or freeing MKR
-    uint256                                          public proposalLifetime;    // Duration of a proposal's validity
-    uint256                                          public minGovStake;         // Min MKR stake for launching a vote
-    uint256                                          public threshold;           // Min % of total locked MKR to approve a proposal
-    uint256                                          public gasStakeAmt;         // Amount of gas to stake when executing ping
-    uint256                                          public maxProposerAmount;   // Max amount of proposals that a proposer can do per calendar day
-    //
-
-
-    // Extra getters:
-
-    function getVotes(uint256 id, address usr) external view returns (uint256) { return proposals[id].votes[usr]; }
-    function gasStorageLength() external view returns(uint256) { return gasStorage.length; }
-
-
-    // Constants:
-
-    uint256 constant public LAUNCH_THRESHOLD    = 100000 ether; // Min amount of totalActive MKR to launch the system
-    uint256 constant public MIN_THRESHOLD       = 40;           // Min threshold value that admin can set
-    uint256 constant public MAX_THRESHOLD       = 60;           // Max threshold value that admin can set
-    uint256 constant public PROPOSAL_PENDING    = 0;            // New proposal created (being voted)
-    uint256 constant public PROPOSAL_SCHEDULED  = 1;            // Proposal scheduled for being executed
-    uint256 constant public PROPOSAL_EXECUTED   = 2;            // Proposal already executed
-    uint256 constant public PROPOSAL_CANCELLED  = 3;            // Proposal cancelled
-
-    // Events:
-
+    /*** Events ***/
     event Rely(address indexed usr);
     event Deny(address indexed usr);
     event File(bytes32 indexed what, uint256 data);
@@ -126,41 +127,35 @@ contract DssGov {
     event Exec(uint256 indexed id);
     event Drop(uint256 indexed id);
 
-
-    // Modifiers:
-
+    /*** Modifiers ***/
     modifier auth {
         require(wards[msg.sender] == 1, "DssGov/not-authorized");
         _;
     }
-
     modifier warm {
         _;
-        lastActivity[msg.sender] = block.timestamp;
+        users[msg.sender].lastActivity = block.timestamp;
     }
 
-
-    // Internal functions:
-
+    /*** Safe Math ***/
     function _add(uint256 x, uint256 y) internal pure returns (uint256 z) {
         require((z = x + y) >= x);
     }
-
     function _sub(uint256 x, uint256 y) internal pure returns (uint256 z) {
         require((z = x - y) <= x);
     }
-
     function _mul(uint256 x, uint256 y) internal pure returns (uint256 z) {
         require(y == 0 || (z = x * y) / y == x);
     }
 
+    /*** Internal Functions ***/
     function _save(address usr, uint256 wad) internal {
-        uint256 num = numSnapshots[usr];
-        if (num > 0 && snapshots[usr][num].fromBlock == block.number) {
-            snapshots[usr][num].rights = wad;
+        uint256 num = users[usr].numSnapshots;
+        if (num > 0 && users[usr].snapshots[num].fromBlock == block.number) {
+            users[usr].snapshots[num].rights = wad;
         } else {
-            numSnapshots[usr] = num = _add(num, 1);
-            snapshots[usr][num] = Snapshot(block.number, wad);
+            users[usr].numSnapshots = num = _add(num, 1);
+            users[usr].snapshots[num] = Snapshot(block.number, wad);
         }
     }
 
@@ -169,34 +164,33 @@ contract DssGov {
         for (uint256 i = 0; i < amt; i++) {
             gasStorage.push(1);
         }
-        gasOwners[usr][src] = amt;
+        users[usr].gasOwners[src] = amt;
         emit MintGas(src, usr, amt);
     }
 
     function _burn(bytes32 src, address usr) internal {
         uint256 l = gasStorage.length;
-        uint256 amt = gasOwners[usr][src];
+        uint256 amt = users[usr].gasOwners[src];
         for (uint256 i = 1; i <= amt; i++) {
             delete gasStorage[l - i]; // TODO: Verify if this is necessary
             gasStorage.pop();
         }
-        gasOwners[usr][src] = 0;
+        users[usr].gasOwners[src] = 0;
         emit BurnGas(src, usr, amt);
     }
 
     function _getUserRights(address usr, uint256 index, uint256 blockNum) internal view returns (uint256 amount) {
-        uint256 num = numSnapshots[usr];
+        uint256 num = users[usr].numSnapshots;
         require(num >= index, "DssGov/not-existing-index");
-        Snapshot memory snapshot = snapshots[usr][index];
+        Snapshot memory snapshot = users[usr].snapshots[index];
         require(snapshot.fromBlock < blockNum, "DssGov/not-correct-snapshot-1"); // "<" protects for flash loans on voting
-        require(index == num || snapshots[usr][index + 1].fromBlock >= blockNum, "DssGov/not-correct-snapshot-2");
+        require(index == num || users[usr].snapshots[index + 1].fromBlock >= blockNum, "DssGov/not-correct-snapshot-2");
 
         amount = snapshot.rights;
     }
 
 
-    // Constructor:
-
+    /*** Constructor ***/
     constructor(address govToken_) public {
         // Assign gov token
         govToken = TokenLike(govToken_);
@@ -209,8 +203,7 @@ contract DssGov {
     }
 
 
-    // External functions:
-
+    /*** External Functions ***/
     function rely(address usr) external auth {
         // Authorize usr
         wards[usr] = 1;
@@ -248,7 +241,7 @@ contract DssGov {
 
     function addProposer(address usr) external auth {
         // Add new proposer address
-        proposers[usr] = 1;
+        proposers[usr].allowed = 1;
 
         // Emit event
         emit AddProposer(usr);
@@ -256,7 +249,7 @@ contract DssGov {
 
     function removeProposer(address usr) external auth {
         // Remove existing proposer address
-        proposers[usr] = 0;
+        proposers[usr].allowed = 0;
 
         // Emit event
         emit RemoveProposer(usr);
@@ -264,7 +257,7 @@ contract DssGov {
 
     function delegate(address owner, address newDelegated) external warm {
         // Get actual delegated address
-        address oldDelegated = delegates[owner];
+        address oldDelegated = users[owner].delegate;
         // Verify it is not trying to set again the actual address
         require(newDelegated != oldDelegated, "DssGov/already-delegated");
 
@@ -272,19 +265,19 @@ contract DssGov {
         require(
             owner == msg.sender || // Owners can always change their own MKR delegation
             oldDelegated == msg.sender && newDelegated == address(0) || // Delegated users can always remove delegations to themselves
-            _add(lastActivity[owner], delegationLifetime) < block.timestamp && newDelegated == address(0), // If there is inactivity anyone can remove delegations
+            _add(users[owner].lastActivity, delegationLifetime) < block.timestamp && newDelegated == address(0), // If there is inactivity anyone can remove delegations
             "DssGov/not-authorized-delegation"
         );
 
         // Set new delegated address
-        delegates[owner] = newDelegated;
+        users[owner].delegate = newDelegated;
 
         // Get owner's deposits
-        uint256 deposit = deposits[owner];
+        uint256 deposit = users[owner].deposit;
 
         // Check if old and new delegated addresses are active
-        bool activeOld = oldDelegated != address(0) && active[oldDelegated] == 1;
-        bool activeNew = newDelegated != address(0) && active[newDelegated] == 1;
+        bool activeOld = oldDelegated != address(0) && users[oldDelegated].active == 1;
+        bool activeNew = newDelegated != address(0) && users[newDelegated].active == 1;
 
         // If both are active or inactive, do nothing. Otherwise update the totActive MKR and emit event
         if (activeOld && !activeNew) {
@@ -298,10 +291,10 @@ contract DssGov {
         // If already existed a delegated address
         if (oldDelegated != address(0)) {
             // Remove owner's voting rights from old delegate
-            rights[oldDelegated] = _sub(rights[oldDelegated], deposit);
+            users[oldDelegated].rights = _sub(users[oldDelegated].rights, deposit);
             // If active, save snapshot
             if(activeOld) {
-                _save(oldDelegated, rights[oldDelegated]);
+                _save(oldDelegated, users[oldDelegated].rights);
             }
         } else {
             _mint("owner", owner);
@@ -310,10 +303,10 @@ contract DssGov {
         // If setting to some delegated address
         if (newDelegated != address(0)) {
             // Add owner's voting rights to those of the new delegate
-            rights[newDelegated] = _add(rights[newDelegated], deposit);
+            users[newDelegated].rights = _add(users[newDelegated].rights, deposit);
             // If active, save snapshot
             if(activeNew) {
-                _save(newDelegated, rights[newDelegated]);
+                _save(newDelegated, users[newDelegated].rights);
             }
         } else {
             _burn("owner", owner);
@@ -328,17 +321,17 @@ contract DssGov {
         govToken.transferFrom(msg.sender, address(this), wad);
 
         // Increase amount deposited from sender
-        deposits[msg.sender] = _add(deposits[msg.sender], wad);
+        users[msg.sender].deposit = _add(users[msg.sender].deposit, wad);
 
         // Get actual delegated address
-        address delegated = delegates[msg.sender];
+        address delegated = users[msg.sender].delegate;
 
         // If there is some delegated address
         if (delegated != address(0)) {
-            rights[delegated] = _add(rights[delegated], wad);
-            if (active[delegated] == 1) {
+            users[delegated].rights = _add(users[delegated].rights, wad);
+            if (users[delegated].active == 1) {
                 // Save user's snapshot
-                _save(delegated, rights[delegated]);
+                _save(delegated, users[delegated].rights);
                 // Update total active and emit event
                 totActive = _add(totActive, wad);
                 emit UpdateTotalActive(totActive);
@@ -351,20 +344,20 @@ contract DssGov {
 
     function free(uint256 wad) external warm {
         // Check if user has not made recently a proposal
-        require(unlockTime[msg.sender] <= block.timestamp, "DssGov/user-locked");
+        require(users[msg.sender].unlockTime <= block.timestamp, "DssGov/user-locked");
 
         // Decrease amount deposited from user
-        deposits[msg.sender] = _sub(deposits[msg.sender], wad);
+        users[msg.sender].deposit = _sub(users[msg.sender].deposit, wad);
 
         // Get actual delegated address
-        address delegated = delegates[msg.sender];
+        address delegated = users[msg.sender].delegate;
 
         // If there is some delegated address
         if (delegated != address(0)) {
-            rights[delegated] = _sub(rights[delegated], wad);
-            if (active[delegated] == 1) {
+            users[delegated].rights = _sub(users[delegated].rights, wad);
+            if (users[delegated].active == 1) {
                 // Save user's snapshot
-                _save(delegated, rights[delegated]);
+                _save(delegated, users[delegated].rights);
                 // Update total active and emit event
                 totActive = _sub(totActive, wad);
                 emit UpdateTotalActive(totActive);
@@ -380,16 +373,16 @@ contract DssGov {
 
     function clear(address usr) external {
         // If already inactive return
-        if (active[usr] == 0) return;
+        if  (users[usr].active == 0) return;
 
         // Check the delegated has not made any recent action
-        require(_add(lastActivity[usr], rightsLifetime) < block.timestamp, "DssGov/not-allowed-to-clear");
+        require(_add(users[usr].lastActivity, rightsLifetime) < block.timestamp, "DssGov/not-allowed-to-clear");
 
         // Mark user as inactive
-        active[usr] = 0;
+        users[usr].active = 0;
 
         // Remove the amount from the total active MKR and emit event
-        uint256 r = rights[usr];
+        uint256 r = users[usr].rights;
         totActive = _sub(totActive, r);
         emit UpdateTotalActive(totActive);
 
@@ -405,13 +398,13 @@ contract DssGov {
 
     function ping() external warm {
         // If already active return
-        if (active[msg.sender] == 1) return;
+        if (users[msg.sender].active == 1) return;
 
         // Mark the user as active
-        active[msg.sender] = 1;
+        users[msg.sender].active = 1;
 
         // Add the amount from the total active MKR and emit event
-        uint256 r = rights[msg.sender];
+        uint256 r = users[msg.sender].rights;
         totActive = _add(totActive, r);
         emit UpdateTotalActive(totActive);
 
@@ -443,28 +436,30 @@ contract DssGov {
         // Check system is live
         require(live == 1, "DssGov/not-launched");
 
-        if (proposers[msg.sender] == 1) { // If it is a proposer account
+        if (proposers[msg.sender].allowed == 1) { // If it is a proposer account
             // Get amount of proposals made by the proposer the last day
-            ProposerDayAmount memory day = proposerDayAmounts[msg.sender];
+            uint256 lastDay = proposers[msg.sender].lastDay;
+            uint256 count   = proposers[msg.sender].count;
             // Get today value
             uint256 today = block.timestamp / 1 days;
             // Get amount of proposals made today
-            uint256 count = day.lastDay == today ? day.count : 0;
+            count = lastDay == today ? count : 0;
             // Check proposer hasn't already reached the maximum per day
             require(count < maxProposerAmount, "DssGov/max-amount-proposals-proposer"); // Max amount of proposals that a proposer can do per calendar day
             // Increment amount of proposals made
-            proposerDayAmounts[msg.sender] = ProposerDayAmount(today, _add(count, 1));
+            proposers[msg.sender].lastDay = today;
+            proposers[msg.sender].count = _add(count, 1);
         } else { // If not a proposer account
             // Check user has at least the min amount of MKR for creating a proposal
-            uint256 deposit = deposits[msg.sender];
+            uint256 deposit = users[msg.sender].deposit;
             require(deposit >= minGovStake, "DssGov/not-minimum-amount");
 
             // Check user has not made another proposal recently
-            require(unlockTime[msg.sender] <= block.timestamp, "DssGov/user-locked");
+            require(users[msg.sender].unlockTime <= block.timestamp, "DssGov/user-locked");
         }
 
         // Update locked time
-        unlockTime[msg.sender] = _add(block.timestamp, lockDuration);
+        users[msg.sender].unlockTime = _add(block.timestamp, lockDuration);
 
         // Add new proposal
         numProposals = _add(numProposals, 1);

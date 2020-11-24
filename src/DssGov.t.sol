@@ -77,6 +77,10 @@ contract GovUser {
         gov.lock(wad);
     }
 
+    function tryFree(uint256 wad) public returns (bool ok) {
+        (ok,) = address(gov).call(abi.encodeWithSignature("free(uint256)", wad));
+    }
+
     function doFree(uint256 wad) public {
         gov.free(wad);
     }
@@ -660,5 +664,22 @@ contract DssGovTest is DSTest {
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
+    }
+
+    function test_vote_lock() public {
+        _launch();
+        uint256 user1LockedAmt = 100000 ether;
+        gov.file("voteLockDuration", 1 days);
+        gov.addProposer(address(user3));
+        user1.doLock(user1LockedAmt);
+        _warp(1);
+        uint256 proposal1 = user3.doPropose(exec0, action1);
+        user1.doVote(proposal1, gov.numSnapshots(address(user1)), user1LockedAmt);
+        assertEq(gov.voteUnlockTime(address(user1)), block.timestamp + 1 days);
+        assertTrue(!user1.tryFree(user1LockedAmt));
+        _warp(1 days / 15 - 1);
+        assertTrue(!user1.tryFree(user1LockedAmt));
+        _warp(1);
+        user1.doFree(user1LockedAmt);
     }
 }

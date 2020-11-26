@@ -502,7 +502,7 @@ contract DssGov {
         require(wad <= _getUserRights(msg.sender, snapshotIndex, proposals[id].blockNum), "DssGov/amount-exceeds-rights");
 
         // Update locked time
-        users[msg.sender].voteUnlockTime = _max(users[msg.sender].voteUnlockTime, _add(block.timestamp, voteLockDuration));
+        users[msg.sender].voteUnlockTime = _add(block.timestamp, voteLockDuration);
 
         uint256 prev = proposals[id].votes[msg.sender];
         // Update voting rights used by the user

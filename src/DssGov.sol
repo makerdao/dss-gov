@@ -470,10 +470,10 @@ contract DssGov {
 
             // Check user has not made another proposal recently
             require(users[msg.sender].proposalUnlockTime <= block.timestamp, "DssGov/user-locked");
-        }
 
-        // Update locked time
-        users[msg.sender].proposalUnlockTime = _add(block.timestamp, proposalLockDuration);
+            // Update locked time
+            users[msg.sender].proposalUnlockTime = _add(block.timestamp, proposalLockDuration);
+        }
 
         // Add new proposal
         numProposals = _add(numProposals, 1);

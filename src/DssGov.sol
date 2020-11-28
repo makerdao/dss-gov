@@ -69,15 +69,16 @@ contract DssGov {
     }
 
     /*** Storage ***/
-    mapping(address => uint256)  public wards;         // Authorized addresses
-    uint256                      public live;          // System liveness
-    TokenLike                    public govToken;      // MKR gov token
-    uint256[]                    public gasStorage;    // Gas storage reserve
-    uint256                      public totActive;     // Total active MKR
-    uint256                      public numProposals;  // Amount of Proposals
-    mapping(uint256 => Proposal) public proposals;     // Proposal Id => Proposal Info
-    mapping(address => Proposer) public proposers;     // Proposer Address => Proposer Info
-    mapping(address => User)     public users;         // User Address => User Info
+    mapping(address => uint256)  public wards;              // Authorized addresses
+    uint256                      public live;               // System liveness
+    TokenLike                    public govToken;           // MKR gov token
+    uint256[]                    public gasStorage;         // Gas storage reserve
+    uint256                      public totActive;          // Total active MKR
+    uint256                      public numProposals;       // Amount of Proposals
+    mapping(uint256 => Proposal) public proposals;          // Proposal Id => Proposal Info
+    mapping(address => Proposer) public proposers;          // Proposer Address => Proposer Info
+    mapping(address => User)     public users;              // User Address => User Info
+    mapping(address => uint256)  public layerTwoDelegates;  // L2 delegates which need some added permissions
 
     /*** Governance Params */
     uint256 public rightsLifetime;      // Delegated rights lifetime without activity of the delegated
@@ -126,6 +127,8 @@ contract DssGov {
     event Plot(uint256 indexed id);
     event Exec(uint256 indexed id);
     event Drop(uint256 indexed id);
+    event AddLayerTwoDelegate(address indexed usr);
+    event RemoveLayerTwoDelegate(address indexed usr);
 
     /*** Modifiers ***/
     modifier auth {
@@ -255,11 +258,26 @@ contract DssGov {
         emit RemoveProposer(usr);
     }
 
+    function addLayerTwoDelegate(address usr) external auth {
+        layerTwoDelegates[usr] = 1;
+
+        emit AddLayerTwoDelegate(usr);
+    }
+
+    function removeLayerTwoDelegate(address usr) external auth {
+        layerTwoDelegates[usr] = 0;
+
+        emit RemoveLayerTwoDelegate(usr);
+    }
+
     function delegate(address owner, address newDelegated) external warm {
         // Get actual delegated address
         address oldDelegated = users[owner].delegate;
         // Verify it is not trying to set again the actual address
         require(newDelegated != oldDelegated, "DssGov/already-delegated");
+
+        //If delegated to L2, L2 must call
+        require(layerTwoDelegates[oldDelegated] == 0 || oldDelegated == msg.sender , "DssGov/user-on-L2");
 
         // Verify if the user is authorized to execute this change in delegation
         require(
@@ -351,6 +369,8 @@ contract DssGov {
 
         // Get actual delegated address
         address delegated = users[msg.sender].delegate;
+        // Verify they are not delegated to L2
+        require(layerTwoDelegates[delegated] == 0, "DssGov/user-on-L2");
 
         // If there is some delegated address
         if (delegated != address(0)) {

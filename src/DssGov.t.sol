@@ -92,6 +92,10 @@ contract GovUser {
     function doVote(uint256 proposal, uint256 sId, uint256 wad) public {
         gov.vote(proposal, sId, wad);
     }
+
+    function doClear(address usr) public {
+        gov.clear(usr);
+    }
 }
 
 contract ActionProposal {
@@ -358,6 +362,15 @@ contract DssGovTest is DSTest {
         user1.doDelegate(address(user1), address(user1));
         gov.launch();
         user1.doFree(100000 ether);
+    }
+
+    function _launch_L2() internal {
+        user1.doLock(100000 ether);
+        user1.doPing();
+        gov.addLayerTwoDelegate(address(user2));
+        user1.doDelegate(address(user1), address(user2));
+        user2.doPing();
+        gov.launch();
     }
 
     function test_propose() public {
@@ -673,5 +686,40 @@ contract DssGovTest is DSTest {
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
+    }
+
+    function test_remove_L2_delegation() public {
+        _launch_L2();
+        user2.doDelegate(address(user1), address(0));
+        (, address delegate,,,,,) = gov.users(address(user1));
+        assertEq(delegate, address(0));
+    }
+
+    function testFail_remove_L2_delegation() public {
+        _launch_L2();
+        user1.doDelegate(address(user1), address(0));
+    }
+
+    function test_remove_L2_delegate_and_free() public {
+        _launch_L2();
+        user2.doDelegate(address(user1), address(0));
+        user1.doFree(10 ether);
+    }
+
+    function testFail_free_L2() public {
+        _launch_L2();
+        user1.doFree(10 ether);
+    }
+
+    function test_add_L2_delegate() public {
+        gov.addLayerTwoDelegate(address(user1));
+        assertEq(gov.layerTwoDelegates(address(user1)), 1);
+    }
+
+    function test_remove_L2_delegate() public {
+        gov.addLayerTwoDelegate(address(user1));
+        assertEq(gov.layerTwoDelegates(address(user1)), 1);
+        gov.removeLayerTwoDelegate(address(user1));
+        assertEq(gov.layerTwoDelegates(address(user1)), 0);
     }
 }

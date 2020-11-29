@@ -78,6 +78,7 @@ contract GovUser {
     }
 
     function doFree(uint256 wad) public {
+        DSToken(address(gov.iouToken())).approve(address(gov), wad);
         gov.free(wad);
     }
 
@@ -151,6 +152,7 @@ contract DssGovTest is DSTest {
     address exec12;
     address mom;
     DSToken govToken;
+    DSToken iouToken;
 
     GovUser user1;
     GovUser user2;
@@ -172,8 +174,10 @@ contract DssGovTest is DSTest {
         govToken = new DSToken("GOV");
         govToken.mint(1000000 ether);
 
+        iouToken = new DSToken("IOU");
+
         // Gov set up
-        gov = new DssGov(address(govToken));
+        gov = new DssGov(address(govToken), address(iouToken));
         gov.file("rightsLifetime", 30 days);
         gov.file("delegationLifetime", 90 days);
         gov.file("proposalLifetime", 7 days);
@@ -181,6 +185,7 @@ contract DssGovTest is DSTest {
         gov.file("gasStakeAmt", 50); // 50 slots of storage
         gov.file("minGovStake", 1000 ether);
         gov.file("maxProposerAmount", 3);
+        iouToken.setOwner(address(gov));
 
         exec12 = address(new GovExec(address(gov), 12 hours));
         exec0 = address(new GovExec(address(gov), 0));

@@ -69,15 +69,15 @@ contract DssGov {
     }
 
     /*** Storage ***/
-    mapping(address => uint256)  public wards;         // Authorized addresses
-    uint256                      public live;          // System liveness
-    TokenLike                    public govToken;      // MKR gov token
-    uint256[]                    public gasStorage;    // Gas storage reserve
-    uint256                      public totActive;     // Total active MKR
-    uint256                      public numProposals;  // Amount of Proposals
-    mapping(uint256 => Proposal) public proposals;     // Proposal Id => Proposal Info
-    mapping(address => Proposer) public proposers;     // Proposer Address => Proposer Info
-    mapping(address => User)     public users;         // User Address => User Info
+    mapping(address => uint256)  public           wards;         // Authorized addresses
+    uint256                      public           live;          // System liveness
+    TokenLike                    public immutable govToken;      // MKR gov token
+    uint256[]                    public           gasStorage;    // Gas storage reserve
+    uint256                      public           totActive;     // Total active MKR
+    uint256                      public           numProposals;  // Amount of Proposals
+    mapping(uint256 => Proposal) public           proposals;     // Proposal Id => Proposal Info
+    mapping(address => Proposer) public           proposers;     // Proposer Address => Proposer Info
+    mapping(address => User)     public           users;         // User Address => User Info
 
     /*** Governance Params */
     uint256 public rightsLifetime;      // Delegated rights lifetime without activity of the delegated

@@ -232,6 +232,7 @@ contract DssGovTest is DSTest {
         user1.doLock(lockedAmt);
 
         assertEq(govToken.balanceOf(address(user1)), user1InitialBalance - lockedAmt);
+        assertEq(iouToken.balanceOf(address(user1)), lockedAmt);
     }
 
     function test_free() public {
@@ -239,9 +240,11 @@ contract DssGovTest is DSTest {
         user1.doApprove(govToken, address(gov), user1LockedAmt);
         user1.doLock(user1LockedAmt);
         assertEq(govToken.balanceOf(address(user1)), user1InitialBalance - user1LockedAmt);
+        assertEq(iouToken.balanceOf(address(user1)), user1LockedAmt);
         hevm.warp(1);
         user1.doFree(user1LockedAmt);
         assertEq(govToken.balanceOf(address(user1)), user1InitialBalance);
+        assertEq(iouToken.balanceOf(address(user1)), 0);
     }
 
     function test_delegate() public {

@@ -55,6 +55,7 @@ contract DssGov {
         uint256                      numSnapshots;  // Amount of snapshots
         mapping(uint256 => Snapshot) snapshots;     // Index => Snapshot
         mapping(bytes32 => uint256)  gasOwners;     // Source => Gas staked
+        mapping(address => uint256)  useCallback;   // Delegated => 1 if implements callback, otherwise 0
     }
 
     struct Proposer {
@@ -189,6 +190,14 @@ contract DssGov {
         amount = snapshot.rights;
     }
 
+    function _addDelegationCallback(address delegated, address owner, uint256 amount) internal returns (bool ok) {
+        (ok,) = delegated.call(abi.encodeWithSignature("addDelegation(address,uint256)", owner, amount));
+    }
+
+    function _delDelegationCallback(address delegated, address owner, uint256 amount) internal returns (bool ok) {
+        (ok,) = delegated.call(abi.encodeWithSignature("delDelegation(address,uint256)", owner, amount));
+    }
+
 
     /*** Constructor ***/
     constructor(address govToken_) public {
@@ -255,7 +264,7 @@ contract DssGov {
         emit RemoveProposer(usr);
     }
 
-    function delegate(address owner, address newDelegated) external warm {
+    function delegate(address owner, address newDelegated, bool callback) external warm {
         // Get actual delegated address
         address oldDelegated = users[owner].delegate;
         // Verify it is not trying to set again the actual address
@@ -288,17 +297,8 @@ contract DssGov {
             emit UpdateTotalActive(totActive);
         }
 
-        // If already existed a delegated address
-        if (oldDelegated != address(0)) {
-            // Remove owner's voting rights from old delegate
-            users[oldDelegated].rights = _sub(users[oldDelegated].rights, deposit);
-            // If active, save snapshot
-            if(activeOld) {
-                _save(oldDelegated, users[oldDelegated].rights);
-            }
-        } else {
-            _mint("owner", owner);
-        }
+        // Emit event
+        emit Delegate(owner, newDelegated);
 
         // If setting to some delegated address
         if (newDelegated != address(0)) {
@@ -308,12 +308,37 @@ contract DssGov {
             if(activeNew) {
                 _save(newDelegated, users[newDelegated].rights);
             }
+
+            // Process callback if corresponds
+            if (callback) {
+                // It enforces the callback succeeds
+                require(_addDelegationCallback(newDelegated, owner, deposit), "DssGov/add-delegation-callback-failed");
+                // Marks this delegation address is using a callback for this owner
+                users[owner].useCallback[newDelegated] = 1;
+            }
         } else {
             _burn("owner", owner);
         }
 
-        // Emit event
-        emit Delegate(owner, newDelegated);
+        // If already existed a delegated address
+        if (oldDelegated != address(0)) {
+            // Remove owner's voting rights from old delegate
+            users[oldDelegated].rights = _sub(users[oldDelegated].rights, deposit);
+            // If active, save snapshot
+            if(activeOld) {
+                _save(oldDelegated, users[oldDelegated].rights);
+            }
+
+            // Process callback if corresponds
+            if (users[owner].useCallback[oldDelegated] == 1) {
+                // In this case it doesn't enforce that the callback succeeds as otherwise the undelegation might get stuck
+                // It's up to the called contract to ensure this function exists and works correctly
+                users[owner].useCallback[oldDelegated] = 0;
+                _delDelegationCallback(oldDelegated, owner, deposit);
+            }
+        } else {
+            _mint("owner", owner);
+        }
     }
 
     function lock(uint256 wad) external warm {
@@ -335,6 +360,11 @@ contract DssGov {
                 // Update total active and emit event
                 totActive = _add(totActive, wad);
                 emit UpdateTotalActive(totActive);
+            }
+
+            // Use callback if corresponds
+            if (users[msg.sender].useCallback[delegated] == 1) {
+                require(_addDelegationCallback(delegated, msg.sender, wad), "DssGov/add-delegation-callback-failed");
             }
         }
 
@@ -361,6 +391,11 @@ contract DssGov {
                 // Update total active and emit event
                 totActive = _sub(totActive, wad);
                 emit UpdateTotalActive(totActive);
+            }
+
+            // Use callback if corresponds
+            if (users[msg.sender].useCallback[delegated] == 1) {
+                require(_delDelegationCallback(delegated, msg.sender, wad), "DssGov/del-delegation-callback-failed");
             }
         }
 

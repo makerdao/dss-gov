@@ -139,12 +139,28 @@ contract System {
     }
 }
 
+contract TestVat {
+
+    uint256 public live;  // Active Flag
+
+    constructor() public {
+        live = 1;
+    }
+
+    function cage() external {
+        live = 0;
+    }
+
+}
+
 contract DssGovTest is DSTest {
     uint256 constant user1InitialBalance = 350000 ether;
     uint256 constant user2InitialBalance = 250000 ether;
     uint256 constant user3InitialBalance = 200000 ether;
 
     Hevm hevm;
+
+    TestVat vat;
 
     DssGov gov;
     address exec0;
@@ -169,11 +185,13 @@ contract DssGovTest is DSTest {
         hevm = Hevm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
         hevm.warp(0);
 
+        vat = new TestVat();
+
         govToken = new DSToken("GOV");
         govToken.mint(1000000 ether);
 
         // Gov set up
-        gov = new DssGov(address(govToken));
+        gov = new DssGov(address(vat), address(govToken));
         gov.file("rightsLifetime", 30 days);
         gov.file("delegationLifetime", 90 days);
         gov.file("proposalLifetime", 7 days);
@@ -673,5 +691,15 @@ contract DssGovTest is DSTest {
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
+    }
+
+    function testFail_free_emergency_shutdown_triggered() public {
+        uint256 user1LockedAmt = user1InitialBalance / 2;
+        user1.doApprove(govToken, address(gov), user1LockedAmt);
+        user1.doLock(user1LockedAmt);
+        assertEq(govToken.balanceOf(address(user1)), user1InitialBalance - user1LockedAmt);
+        vat.cage();
+        hevm.warp(1);
+        user1.doFree(user1LockedAmt);
     }
 }

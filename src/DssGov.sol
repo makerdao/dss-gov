@@ -31,6 +31,10 @@ interface ExecLike {
     function plot(address) external;
 }
 
+interface VatLike {
+    function live() external view returns (uint256);
+}
+
 contract DssGov {
 
     /*** Structs ***/
@@ -71,6 +75,7 @@ contract DssGov {
     /*** Storage ***/
     mapping(address => uint256)  public           wards;         // Authorized addresses
     uint256                      public           live;          // System liveness
+    VatLike                      public immutable vat;           // The vat
     TokenLike                    public immutable govToken;      // MKR gov token
     uint256[]                    public           gasStorage;    // Gas storage reserve
     uint256                      public           totActive;     // Total active MKR
@@ -191,7 +196,10 @@ contract DssGov {
 
 
     /*** Constructor ***/
-    constructor(address govToken_) public {
+    constructor(address vat_, address govToken_) public {
+        // Assign vat
+        vat = VatLike(vat_);
+
         // Assign gov token
         govToken = TokenLike(govToken_);
 
@@ -343,6 +351,9 @@ contract DssGov {
     }
 
     function free(uint256 wad) external warm {
+        // Disallow freeing MKR when Maker has shut down
+        require(vat.live() == 1, "DssGov/vat-not-live");
+
         // Check if user has not made recently a proposal
         require(users[msg.sender].unlockTime <= block.timestamp, "DssGov/user-locked");
 

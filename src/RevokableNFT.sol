@@ -19,25 +19,95 @@
 
 pragma solidity ^0.6.7;
 
-// An NFT which allows authed users to be able to revoke the token.
-// Follows the ERC721 standard.
-contract RevokableNFT {
+import "zeppelin-solidity/token/ERC721/ERC721.sol";
+import "zeppelin-solidity/util/ReentrancyGuard.sol";
+
+interface ITokenRevokedReceiver {
+    function onTokenRevoked(address token, uint256 tokenId) external;
+}
+
+// An NFT which allows authed users to be able to revoke the token at any time.
+// Uses the ERC721 standard.
+contract RevokableNFT is ERC721, ReentrancyGuard {
+
+    using SafeMath for uint256;
+    using Address for address;
 
     /*** Events ***/
     event Rely(address indexed usr);
     event Deny(address indexed usr);
+    event File(bytes32 indexed what, uint256 data);
+    event Mint(address indexed usr, uint256 id, uint256 value);
+    event Revoke(address indexed usr, uint256 id, uint256 value);
 
     /*** Auth ***/
     function rely(address usr) external auth { wards[usr] = 1; emit Rely(usr); }
     function deny(address usr) external auth { wards[usr] = 0; emit Deny(usr); }
     modifier auth { require(wards[msg.sender] == 1, "RevokableNFT/not-authorized"); _; }
 
-    constructor(string name_, string symbol_) {
+    uint256 public revokeGasLimit;                      // The gas limit for calling onRevokeToken()
+    mapping(uint256 => uint256) public tokenValue;      // Token ID => Token Value
+    mapping(address => uint256) public addressValue;    // Address => Total Token Value
+
+    constructor(string memory name_, string memory symbol_) ERC721(name_, symbol_) public {
         // Authorize msg.sender
         wards[msg.sender] = 1;
 
         // Emit event
         emit Rely(msg.sender);
+    }
+
+    function file(bytes32 what, uint256 data) external auth {
+        if (what == "revokeGasLimit") revokeGasLimit = data;
+        else revert("RevokableNFT/file-unrecognized-param");
+
+        // Emit event
+        emit File(what, data);
+    }
+
+    function mint(address usr, uint256 value) external auth returns (uint256 tokenId) {
+       tokenId = 123;   // TODO generate id
+
+        tokenValue[tokenId] = value;
+        _mint(delegatee, tokenId);
+
+        emit Mint(delegatee, tokenId, value);
+    }
+
+    function revoke(uint256 tokenId) external auth nonReentrant {
+        address owner = ownerOf(tokenId);
+
+        // Before revoking notify the owner that this token is about to be revoked
+        // This is optional for the owner to be able to handle this
+        _callOnTokenRevoked(tokenId);
+
+        _burn(tokenId);
+        delete tokenValue[owner];
+    }
+
+    function _callOnTokenRevoked(address owner, uint256 tokenId) private returns (bool) {
+        // EOAs do not have code
+        if (!owner.isContract()) {
+            return true;
+        }
+
+        // Set a fixed gas limit to prevent blocking this transaction with infinite gas exhaustion
+        owner.gas(revokeGasLimit).call(abi.encodeWithSelector(
+            ITokenRevokedReceiver(owner).onTokenRevoked.selector,
+            address(this),
+            tokenId
+        ));
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal override {
+        // Keep value accounting up to date
+        uint256 value = tokenValue[tokenId];
+        if (from != address(0)) {
+            addressValue[from] = addressValue[from].sub(value);
+        }
+        if (to != address(0)) {
+            addressValue[to] = addressValue[to].add(value);
+        }
     }
 
 }

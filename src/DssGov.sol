@@ -31,6 +31,11 @@ interface ExecLike {
     function plot(address) external;
 }
 
+interface RevokableNFTLike {
+    function mint(address usr, uint256 value) external;
+    function revoke(uint256 tokenId) external;
+}
+
 contract DssGov {
 
     /*** Structs ***/
@@ -46,15 +51,16 @@ contract DssGov {
     }
 
     struct User {
-        uint256                      deposit;       // MKR deposited
-        address                      delegate;      // Delegated User
-        uint256                      rights;        // Voting rights
-        uint256                      active;        // 1 if User is active, otherwise 0
-        uint256                      lastActivity;  // Last activity time
-        uint256                      unlockTime;    // Time to be able to free MKR or make a new proposal
-        uint256                      numSnapshots;  // Amount of snapshots
-        mapping(uint256 => Snapshot) snapshots;     // Index => Snapshot
-        mapping(bytes32 => uint256)  gasOwners;     // Source => Gas staked
+        uint256                      deposit;         // MKR deposited
+        address                      delegate;        // Delegated User
+        uint256                      delegateTokenId; // Token ID for delegate user
+        uint256                      rights;          // Voting rights
+        uint256                      active;          // 1 if User is active, otherwise 0
+        uint256                      lastActivity;    // Last activity time
+        uint256                      unlockTime;      // Time to be able to free MKR or make a new proposal
+        uint256                      numSnapshots;    // Amount of snapshots
+        mapping(uint256 => Snapshot) snapshots;       // Index => Snapshot
+        mapping(bytes32 => uint256)  gasOwners;       // Source => Gas staked
     }
 
     struct Proposer {
@@ -72,6 +78,7 @@ contract DssGov {
     mapping(address => uint256)  public           wards;         // Authorized addresses
     uint256                      public           live;          // System liveness
     TokenLike                    public immutable govToken;      // MKR gov token
+    RevokableNFTLike             public immutable delegateToken; // Delegation NFT
     uint256[]                    public           gasStorage;    // Gas storage reserve
     uint256                      public           totActive;     // Total active MKR
     uint256                      public           numProposals;  // Amount of Proposals
@@ -191,9 +198,10 @@ contract DssGov {
 
 
     /*** Constructor ***/
-    constructor(address govToken_) public {
+    constructor(address govToken_, address delegateToken_) public {
         // Assign gov token
         govToken = TokenLike(govToken_);
+        delegateToken = RevokableNFTLike(delegateToken_);
 
         // Authorize msg.sender
         wards[msg.sender] = 1;
@@ -292,6 +300,8 @@ contract DssGov {
         if (oldDelegated != address(0)) {
             // Remove owner's voting rights from old delegate
             users[oldDelegated].rights = _sub(users[oldDelegated].rights, deposit);
+            // Revoke the old delegate's NFT
+            delegateToken.revoke(users[owner].delegateTokenId);
             // If active, save snapshot
             if(activeOld) {
                 _save(oldDelegated, users[oldDelegated].rights);
@@ -304,6 +314,8 @@ contract DssGov {
         if (newDelegated != address(0)) {
             // Add owner's voting rights to those of the new delegate
             users[newDelegated].rights = _add(users[newDelegated].rights, deposit);
+            // Mint an NFT for the new delegatee
+            users[owner].delegateTokenId = delegateToken.mint(newDelegated, deposit);
             // If active, save snapshot
             if(activeNew) {
                 _save(newDelegated, users[newDelegated].rights);

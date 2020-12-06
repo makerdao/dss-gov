@@ -4,3 +4,6 @@
 [submodule "lib/ds-token"]
 	path = lib/ds-token
 	url = https://github.com/makerdao/ds-token
+[submodule "lib/zeppelin-solidity"]
+	path = lib/zeppelin-solidity
+	url = https://github.com/OpenZeppelin/zeppelin-solidity

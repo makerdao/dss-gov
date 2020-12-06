@@ -20,7 +20,7 @@
 pragma solidity ^0.6.7;
 
 import "zeppelin-solidity/token/ERC721/ERC721.sol";
-import "zeppelin-solidity/util/ReentrancyGuard.sol";
+import "zeppelin-solidity/utils/ReentrancyGuard.sol";
 
 interface ITokenRevokedReceiver {
     function onTokenRevoked(address token, uint256 tokenId) external;
@@ -41,6 +41,7 @@ contract RevokableNFT is ERC721, ReentrancyGuard {
     event Revoke(address indexed usr, uint256 id, uint256 value);
 
     /*** Auth ***/
+    mapping(address => uint256) public wards;
     function rely(address usr) external auth { wards[usr] = 1; emit Rely(usr); }
     function deny(address usr) external auth { wards[usr] = 0; emit Deny(usr); }
     modifier auth { require(wards[msg.sender] == 1, "RevokableNFT/not-authorized"); _; }
@@ -69,9 +70,9 @@ contract RevokableNFT is ERC721, ReentrancyGuard {
        tokenId = 123;   // TODO generate id
 
         tokenValue[tokenId] = value;
-        _mint(delegatee, tokenId);
+        _mint(usr, tokenId);
 
-        emit Mint(delegatee, tokenId, value);
+        emit Mint(usr, tokenId, value);
     }
 
     function revoke(uint256 tokenId) external auth nonReentrant {
@@ -79,10 +80,10 @@ contract RevokableNFT is ERC721, ReentrancyGuard {
 
         // Before revoking notify the owner that this token is about to be revoked
         // This is optional for the owner to be able to handle this
-        _callOnTokenRevoked(tokenId);
+        _callOnTokenRevoked(owner, tokenId);
 
         _burn(tokenId);
-        delete tokenValue[owner];
+        delete tokenValue[tokenId];
     }
 
     function _callOnTokenRevoked(address owner, uint256 tokenId) private returns (bool) {
@@ -92,7 +93,7 @@ contract RevokableNFT is ERC721, ReentrancyGuard {
         }
 
         // Set a fixed gas limit to prevent blocking this transaction with infinite gas exhaustion
-        owner.gas(revokeGasLimit).call(abi.encodeWithSelector(
+        owner.call{ gas: revokeGasLimit }(abi.encodeWithSelector(
             ITokenRevokedReceiver(owner).onTokenRevoked.selector,
             address(this),
             tokenId

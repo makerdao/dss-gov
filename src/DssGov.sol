@@ -24,6 +24,11 @@ interface TokenLike {
     function transfer(address, uint256) external;
 }
 
+interface MintableTokenLike {
+    function mint(address, uint256) external;
+    function burn(address, uint256) external;
+}
+
 interface ExecLike {
     function delay() external view returns (uint256);
     function drop(address) external;
@@ -72,6 +77,7 @@ contract DssGov {
     mapping(address => uint256)  public           wards;         // Authorized addresses
     uint256                      public           live;          // System liveness
     TokenLike                    public immutable govToken;      // MKR gov token
+    MintableTokenLike            public immutable iouToken;      // IOU token
     uint256[]                    public           gasStorage;    // Gas storage reserve
     uint256                      public           totActive;     // Total active MKR
     uint256                      public           numProposals;  // Amount of Proposals
@@ -191,9 +197,10 @@ contract DssGov {
 
 
     /*** Constructor ***/
-    constructor(address govToken_) public {
-        // Assign gov token
+    constructor(address govToken_, address iouToken_) public {
+        // Assign gov and iou tokens
         govToken = TokenLike(govToken_);
+        iouToken = MintableTokenLike(iouToken_);
 
         // Authorize msg.sender
         wards[msg.sender] = 1;
@@ -320,6 +327,9 @@ contract DssGov {
         // Pull MKR from sender's wallet
         govToken.transferFrom(msg.sender, address(this), wad);
 
+        // Mint IOU tokens for the sender
+        iouToken.mint(msg.sender, wad);
+
         // Increase amount deposited from sender
         users[msg.sender].deposit = _add(users[msg.sender].deposit, wad);
 
@@ -345,6 +355,9 @@ contract DssGov {
     function free(uint256 wad) external warm {
         // Check if user has not made recently a proposal
         require(users[msg.sender].unlockTime <= block.timestamp, "DssGov/user-locked");
+
+        // Burn the sender's IOU tokens
+        iouToken.burn(msg.sender, wad);
 
         // Decrease amount deposited from user
         users[msg.sender].deposit = _sub(users[msg.sender].deposit, wad);

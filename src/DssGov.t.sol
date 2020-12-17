@@ -77,6 +77,10 @@ contract GovUser {
         gov.lock(wad);
     }
 
+    function tryFree(uint256 wad) public returns (bool ok) {
+        (ok,) = address(gov).call(abi.encodeWithSignature("free(uint256)", wad));
+    }
+
     function doFree(uint256 wad) public {
         DSToken(address(gov.iouToken())).approve(address(gov), wad);
         gov.free(wad);
@@ -248,14 +252,14 @@ contract DssGovTest is DSTest {
     }
 
     function test_delegate() public {
-        (, address delegate,,,,,) = gov.users(address(user1));
-        (,, uint256 rights,,,,)    = gov.users(address(user2));
+        (, address delegate,,,,,,) = gov.users(address(user1));
+        (,, uint256 rights,,,,,)    = gov.users(address(user2));
         assertEq(delegate, address(0));
         assertEq(rights, 0);
         user1.doLock(user1InitialBalance);
         user1.doDelegate(address(user1), address(user2));
-        (, delegate,,,,,) = gov.users(address(user1));
-        (,, rights,,,,)    = gov.users(address(user2));
+        (, delegate,,,,,,) = gov.users(address(user1));
+        (,, rights,,,,,)    = gov.users(address(user2));
         assertEq(delegate, address(user2));
         assertEq(rights, user1InitialBalance);
     }
@@ -291,7 +295,7 @@ contract DssGovTest is DSTest {
     function test_snapshot() public {
         uint256 originalBlockNumber = block.number;
 
-        (,,,,,, uint256 numSnapshots) = gov.users(address(user1));
+        (,,,,,,, uint256 numSnapshots) = gov.users(address(user1));
 
         assertEq(numSnapshots, 0);
 
@@ -300,7 +304,7 @@ contract DssGovTest is DSTest {
         _warp(1);
         user1.doPing();
 
-        (,,,,,, numSnapshots) = gov.users(address(user1));
+        (,,,,,,, numSnapshots) = gov.users(address(user1));
         (uint256 fromBlock, uint256 rights) = gov.snapshots(address(user1), numSnapshots);
         assertEq(fromBlock, originalBlockNumber + 1);
         assertEq(rights, 0);
@@ -308,7 +312,7 @@ contract DssGovTest is DSTest {
         _warp(1);
         user1.doDelegate(address(user1), address(user1));
 
-        (,,,,,, numSnapshots) = gov.users(address(user1));
+        (,,,,,,, numSnapshots) = gov.users(address(user1));
         assertEq(numSnapshots, 2);
         (fromBlock, rights) = gov.snapshots(address(user1), numSnapshots);
         assertEq(fromBlock, originalBlockNumber + 2);
@@ -318,11 +322,11 @@ contract DssGovTest is DSTest {
     function test_ping() public {
         user1.doLock(user1InitialBalance);
         user1.doDelegate(address(user1), address(user1));
-        (,,, uint256 active,,,) = gov.users(address(user1));
+        (,,, uint256 active,,,,) = gov.users(address(user1));
         assertEq(active, 0);
         assertEq(gov.totActive(), 0);
         user1.doPing();
-        (,,, active,,,) = gov.users(address(user1));
+        (,,, active,,,,) = gov.users(address(user1));
         assertEq(active, 1);
         assertEq(gov.totActive(), user1InitialBalance);
     }
@@ -331,12 +335,12 @@ contract DssGovTest is DSTest {
         user1.doLock(user1InitialBalance);
         user1.doDelegate(address(user1), address(user1));
         user1.doPing();
-         (,,, uint256 active,,,) = gov.users(address(user1));
+         (,,, uint256 active,,,,) = gov.users(address(user1));
         assertEq(active, 1);
         assertEq(gov.totActive(), user1InitialBalance);
         _warp(gov.rightsLifetime() / 15 + 1);
         gov.clear(address(user1));
-        (,,, active,,,) = gov.users(address(user1));
+        (,,, active,,,,) = gov.users(address(user1));
         assertEq(active, 0);
         assertEq(gov.totActive(), 0);
     }
@@ -404,7 +408,7 @@ contract DssGovTest is DSTest {
         assertEq(totVotes3, 0);
 
         // Vote will full rights on proposal 1
-        (,,,,,, uint256 numSnapshots) = gov.users(address(user1));
+        (,,,,,,, uint256 numSnapshots) = gov.users(address(user1));
         user1.doVote(proposal1, numSnapshots, user1LockedAmt);
         (,,,,, totVotes1,) = gov.proposals(proposal1);
         (,,,,, totVotes2,) = gov.proposals(proposal2);
@@ -469,7 +473,7 @@ contract DssGovTest is DSTest {
         (,,,,,, uint256 status) = gov.proposals(proposal);
         assertEq(status, gov.PROPOSAL_PENDING());
 
-        (,,,,,, uint256 numSnapshots) = gov.users(address(user1));
+        (,,,,,,, uint256 numSnapshots) = gov.users(address(user1));
         user1.doVote(proposal, numSnapshots, user1InitialBalance);
 
         gov.plot(proposal);
@@ -490,7 +494,7 @@ contract DssGovTest is DSTest {
         _warp(1);
 
         uint256 proposal = user1.doPropose(exec12, action1);
-        (,,,,,, uint256 numSnapshots) = gov.users(address(user1));
+        (,,,,,,, uint256 numSnapshots) = gov.users(address(user1));
         user1.doVote(proposal, numSnapshots, user1InitialBalance);
 
         gov.plot(proposal);
@@ -504,7 +508,7 @@ contract DssGovTest is DSTest {
         _warp(1);
 
         uint256 proposal = user1.doPropose(exec12, action1);
-        (,,,,,, uint256 numSnapshots) = gov.users(address(user1));
+        (,,,,,,, uint256 numSnapshots) = gov.users(address(user1));
         user1.doVote(proposal, numSnapshots, user1InitialBalance);
 
         gov.exec(proposal);
@@ -517,7 +521,7 @@ contract DssGovTest is DSTest {
         _warp(1);
 
         uint256 proposal = user1.doPropose(exec12, action1);
-        (,,,,,, uint256 numSnapshots) = gov.users(address(user1));
+        (,,,,,,, uint256 numSnapshots) = gov.users(address(user1));
         user1.doVote(proposal, numSnapshots, user1InitialBalance);
 
         gov.plot(proposal);
@@ -681,5 +685,45 @@ contract DssGovTest is DSTest {
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
         user3.doPropose(exec12, action1);
+    }
+
+    function test_vote_lock() public {
+        _launch();
+        uint256 user1LockedAmt = 100000 ether;
+        gov.file("voteLockDuration", 1 days);
+        gov.addProposer(address(user3));
+        user1.doLock(user1LockedAmt);
+        _warp(1);
+        uint256 proposal1 = user3.doPropose(exec0, action1);
+        (,,,,,,, uint256 numSnapshots) = gov.users(address(user1));
+        user1.doVote(proposal1, numSnapshots, user1LockedAmt);
+        (,,,,,, uint256 voteUnlockTime,) = gov.users(address(user1));
+        assertEq(voteUnlockTime, block.timestamp + 1 days);
+        assertTrue(!user1.tryFree(user1LockedAmt));
+        _warp(1 days / 15 - 1);
+        assertTrue(!user1.tryFree(user1LockedAmt));
+        _warp(1);
+        user1.doFree(user1LockedAmt);
+    }
+
+    function test_vote_delegate_lock() public {
+        _launch();
+        uint256 userLockedAmt = 100000 ether;
+        gov.file("voteLockDuration", 1 days);
+        gov.addProposer(address(user3));
+        user2.doLock(userLockedAmt);
+        user2.doDelegate(address(user2), address(user1));
+        _warp(1);
+        uint256 proposal1 = user3.doPropose(exec0, action1);
+        (,,,,,,, uint256 numSnapshots) = gov.users(address(user1));
+        user1.doVote(proposal1, numSnapshots, userLockedAmt);
+        (,,,,,, uint256 voteUnlockTime,) = gov.users(address(user2));
+        assertEq(voteUnlockTime, 0);
+        assertTrue(!user2.tryFree(userLockedAmt));
+        _warp(1 days / 15 - 1);
+        user2.doDelegate(address(user2), address(user2));
+        assertTrue(!user2.tryFree(userLockedAmt));
+        _warp(1);
+        user2.doFree(userLockedAmt);
     }
 }

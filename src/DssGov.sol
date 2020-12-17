@@ -51,15 +51,16 @@ contract DssGov {
     }
 
     struct User {
-        uint256                      deposit;       // MKR deposited
-        address                      delegate;      // Delegated User
-        uint256                      rights;        // Voting rights
-        uint256                      active;        // 1 if User is active, otherwise 0
-        uint256                      lastActivity;  // Last activity time
-        uint256                      unlockTime;    // Time to be able to free MKR or make a new proposal
-        uint256                      numSnapshots;  // Amount of snapshots
-        mapping(uint256 => Snapshot) snapshots;     // Index => Snapshot
-        mapping(bytes32 => uint256)  gasOwners;     // Source => Gas staked
+        uint256                      deposit;            // MKR deposited
+        address                      delegate;           // Delegated User
+        uint256                      rights;             // Voting rights
+        uint256                      active;             // 1 if User is active, otherwise 0
+        uint256                      lastActivity;       // Last activity time
+        uint256                      proposalUnlockTime; // Time to be able to free MKR or make a new proposal after making a proposal
+        uint256                      voteUnlockTime;     // Time to be able to free MKR after voting
+        uint256                      numSnapshots;       // Amount of snapshots
+        mapping(uint256 => Snapshot) snapshots;          // Index => Snapshot
+        mapping(bytes32 => uint256)  gasOwners;          // Source => Gas staked
     }
 
     struct Proposer {
@@ -86,14 +87,15 @@ contract DssGov {
     mapping(address => User)     public           users;         // User Address => User Info
 
     /*** Governance Params */
-    uint256 public rightsLifetime;      // Delegated rights lifetime without activity of the delegated
-    uint256 public delegationLifetime;  // Lifetime of delegation without activity of the MKR owner
-    uint256 public lockDuration;        // Min time after making a proposal for a second one or freeing MKR
-    uint256 public proposalLifetime;    // Duration of a proposal's validity
-    uint256 public minGovStake;         // Min MKR stake for launching a vote
-    uint256 public threshold;           // Min % of total locked MKR to approve a proposal
-    uint256 public gasStakeAmt;         // Amount of gas to stake when executing ping
-    uint256 public maxProposerAmount;   // Max amount of proposals that a proposer can do per calendar day
+    uint256 public rightsLifetime;       // Delegated rights lifetime without activity of the delegated
+    uint256 public delegationLifetime;   // Lifetime of delegation without activity of the MKR owner
+    uint256 public proposalLockDuration; // Min time after making a proposal for a second one or freeing MKR
+    uint256 public voteLockDuration;     // Min time after making a vote for freeing MKR
+    uint256 public proposalLifetime;     // Duration of a proposal's validity
+    uint256 public minGovStake;          // Min MKR stake for launching a vote
+    uint256 public threshold;            // Min % of total locked MKR to approve a proposal
+    uint256 public gasStakeAmt;          // Amount of gas to stake when executing ping
+    uint256 public maxProposerAmount;    // Max amount of proposals that a proposer can do per calendar day
 
     /*** Getters */
     function votes(uint256 id, address usr)      external view returns (uint256) { return proposals[id].votes[usr];  }
@@ -152,6 +154,9 @@ contract DssGov {
     }
     function _mul(uint256 x, uint256 y) internal pure returns (uint256 z) {
         require(y == 0 || (z = x * y) / y == x);
+    }
+    function _max(uint256 x, uint256 y) internal pure returns (uint256 z) {
+        z = x > y ? x : y;
     }
 
     /*** Internal Functions ***/
@@ -231,7 +236,8 @@ contract DssGov {
         // Update parameter
         if (what == "rightsLifetime") rightsLifetime = data;
         else if (what == "delegationLifetime") delegationLifetime = data;
-        else if (what == "lockDuration") lockDuration = data; // TODO: Define if we want to place a safe max time
+        else if (what == "proposalLockDuration") proposalLockDuration = data; // TODO: Define if we want to place a safe max time
+        else if (what == "voteLockDuration") voteLockDuration = data;
         else if (what == "proposalLifetime") proposalLifetime = data;
         else if (what == "minGovStake") minGovStake = data;
         else if (what == "gasStakeAmt") gasStakeAmt = data;
@@ -297,6 +303,8 @@ contract DssGov {
 
         // If already existed a delegated address
         if (oldDelegated != address(0)) {
+            // Copy the vote lock to the user
+            users[owner].voteUnlockTime = _max(users[owner].voteUnlockTime, users[oldDelegated].voteUnlockTime);
             // Remove owner's voting rights from old delegate
             users[oldDelegated].rights = _sub(users[oldDelegated].rights, deposit);
             // If active, save snapshot
@@ -354,7 +362,10 @@ contract DssGov {
 
     function free(uint256 wad) external warm {
         // Check if user has not made recently a proposal
-        require(users[msg.sender].unlockTime <= block.timestamp, "DssGov/user-locked");
+        require(users[msg.sender].proposalUnlockTime <= block.timestamp, "DssGov/user-locked");
+
+        // Check if user has not voted recently
+        require(users[msg.sender].voteUnlockTime <= block.timestamp, "DssGov/user-locked");
 
         // Burn the sender's IOU tokens
         iouToken.burn(msg.sender, wad);
@@ -367,6 +378,9 @@ contract DssGov {
 
         // If there is some delegated address
         if (delegated != address(0)) {
+            // Check if delegate has not voted recently
+            require(users[delegated].voteUnlockTime <= block.timestamp, "DssGov/user-locked");
+            
             users[delegated].rights = _sub(users[delegated].rights, wad);
             if (users[delegated].active == 1) {
                 // Save user's snapshot
@@ -468,10 +482,10 @@ contract DssGov {
             require(deposit >= minGovStake, "DssGov/not-minimum-amount");
 
             // Check user has not made another proposal recently
-            require(users[msg.sender].unlockTime <= block.timestamp, "DssGov/user-locked");
+            require(users[msg.sender].proposalUnlockTime <= block.timestamp, "DssGov/user-locked");
 
             // Update locked time
-            users[msg.sender].unlockTime = _add(block.timestamp, lockDuration);
+            users[msg.sender].proposalUnlockTime = _add(block.timestamp, proposalLockDuration);
         }
 
         // Add new proposal
@@ -499,6 +513,9 @@ contract DssGov {
         require(proposals[id].end >= block.timestamp, "DssGov/proposal-expired");
         // Verify amount for voting is lower or equal than voting rights
         require(wad <= _getUserRights(msg.sender, snapshotIndex, proposals[id].blockNum), "DssGov/amount-exceeds-rights");
+
+        // Update locked time
+        users[msg.sender].voteUnlockTime = _max(users[msg.sender].voteUnlockTime, _add(block.timestamp, voteLockDuration));
 
         uint256 prev = proposals[id].votes[msg.sender];
         // Update voting rights used by the user

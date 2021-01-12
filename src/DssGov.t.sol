@@ -726,4 +726,21 @@ contract DssGovTest is DSTest {
         _warp(1);
         user2.doFree(userLockedAmt);
     }
+
+    function testFail_user_cant_vote_if_clear_same_block() public {
+        _launch();
+        gov.addProposer(address(user3));
+        user1.doLock(user1InitialBalance);
+        user1.doPing();
+        _warp(gov.rightsLifetime() / 15 + 1);
+
+        gov.clear(address(user1));
+        uint256 proposal = user3.doPropose(exec12, action1);
+        (,,,, uint totActive,,) = gov.proposals(proposal);
+        assertEq(totActive, 0);
+        (,,,,,,, uint256 numSnapshots) = gov.users(address(user1));
+        _warp(1);
+        // Try to vote with prev snapshot and should fail as there is a snapshot in this block
+        user1.doVote(proposal, numSnapshots - 1, user1InitialBalance);
+    }
 }

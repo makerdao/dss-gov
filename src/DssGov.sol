@@ -195,7 +195,7 @@ contract DssGov {
         require(num >= index, "DssGov/not-existing-index");
         Snapshot memory snapshot = users[usr].snapshots[index];
         require(snapshot.fromBlock < blockNum, "DssGov/not-correct-snapshot-1"); // "<" protects for flash loans on voting
-        require(index == num || users[usr].snapshots[index + 1].fromBlock >= blockNum, "DssGov/not-correct-snapshot-2");
+        require(index == num || users[usr].snapshots[index + 1].fromBlock > blockNum, "DssGov/not-correct-snapshot-2");
 
         amount = snapshot.rights;
     }

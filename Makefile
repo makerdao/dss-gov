@@ -1,4 +1,4 @@
-all    :; dapp build
+all    :; dapp --use solc:0.6.11 build
 clean  :; dapp clean
-test   :; dapp test
-deploy :; dapp create DssGov
+test   :; dapp --use solc:0.6.11 test -v
+deploy :; make && dapp create DssGov

@@ -17,7 +17,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-pragma solidity ^0.6.7;
+pragma solidity ^0.6.11;
 
 interface TokenLike {
     function transferFrom(address, address, uint256) external;
@@ -380,7 +380,7 @@ contract DssGov {
         if (delegated != address(0)) {
             // Check if delegate has not voted recently
             require(users[delegated].voteUnlockTime <= block.timestamp, "DssGov/user-locked");
-            
+
             users[delegated].rights = _sub(users[delegated].rights, wad);
             if (users[delegated].active == 1) {
                 // Save user's snapshot
